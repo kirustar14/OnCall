@@ -80,8 +80,13 @@ export default function CaseSession({ caseId, active, onAgentStep }) {
           {/* Only the current alert, and only the line that was spoken. The
               reasoning is long by design and already streams to the Agent Log;
               putting it here stacked three deep buried the thing the clinician
-              actually needs to read. */}
-          <div className={`alert-banner urgency-${latestAlert.urgency || 'critical'}`}>
+              actually needs to read. It then clears itself once the room has
+              actually heard it, so a stale warning never sits over a live case. */}
+          <div
+            className={`alert-banner urgency-${latestAlert.urgency || 'critical'}${
+              latestAlert.leaving ? ' leaving' : ''
+            }`}
+          >
             <div className="alert-head">
               <span className="alert-text">⚠️ {latestAlert.text}</span>
               {latestAlert.reasoning && (

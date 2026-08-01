@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=600, height=600, initial-scale=1.0, user-scalable=no">
+  <meta name="description" content="Servare on the glasses: what the agent just said, and what nobody owns.">
+  <!-- Identifies the page as a Meta Ray-Ban Display compatible web app. -->
+  <meta name="mrbd-web-app-capable" content="yes">
+  <title>Servare</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!--
+    600 x 600dp on an additive waveguide. #000000 emits no light, so the page
+    background is genuinely see-through and the clinician keeps their view of
+    the patient. Only the surfaces that must be readable emit.
+
+    This is deliberately not the desktop app shrunk down. The wearer has both
+    hands in a patient and cannot read a ledger. Voice remains the interface;
+    the display exists so they can CHECK what they just heard without looking
+    away for long. Two states, no navigation deeper than one step.
+  -->
+  <div id="app">
+
+    <!-- Standby: almost nothing. The room is being listened to; that is all. -->
+    <div id="standby" class="screen">
+      <div class="standby-mark">
+        <span class="pulse" id="pulse"></span>
+        <span class="standby-label" id="standby-case">Listening</span>
+      </div>
+
+      <div class="standby-open" id="standby-open" hidden>
+        <div class="standby-open-count" id="unowned-count">0</div>
+        <div class="standby-open-label">unowned</div>
+      </div>
+
+      <div class="conn" id="conn">connecting</div>
+    </div>
+
+    <!-- Alert: the interrupt. Takes the display, white, high contrast. -->
+    <div id="alert" class="screen hidden">
+      <div class="alert-card" id="alert-card">
+        <div class="alert-kind" id="alert-kind">ADVISORY</div>
+        <p class="alert-text" id="alert-text"></p>
+        <div class="alert-provenance" id="alert-provenance"></div>
+      </div>
+      <nav class="rail">
+        <button class="btn focusable" data-action="dismiss">Got it</button>
+        <button class="btn focusable" data-action="open-work">Open work</button>
+      </nav>
+    </div>
+
+    <!-- Open work: the list nobody else is tracking. Read-only by design — a
+         task is claimed by saying so out loud, not by pinching at a menu. -->
+    <div id="work" class="screen hidden">
+      <header class="header">
+        <h1>Nobody owns</h1>
+        <span class="header-meta" id="work-count"></span>
+      </header>
+      <div class="content list-container" id="work-list"></div>
+      <nav class="rail">
+        <button class="btn focusable" data-action="back">Back</button>
+      </nav>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

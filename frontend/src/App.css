@@ -191,6 +191,15 @@ body {
   font-weight: 600;
   font-size: 14px;
   box-shadow: 0 2px 8px rgba(179, 38, 30, 0.25);
+  opacity: 1;
+  transition: opacity 300ms ease;
+}
+
+/* Applied the instant this banner's own spoken alert finishes, or fails to play.
+   It fades in place before being dropped from the list a beat later, so it does
+   not simply pop out from under the reader's eye. */
+.alert-banner.leaving {
+  opacity: 0;
 }
 
 /* Urgency steps the banner down in intensity, but never into the quiet palette —

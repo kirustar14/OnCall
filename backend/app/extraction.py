@@ -16,6 +16,7 @@ import anthropic
 from app.case_store import CaseState, WorkItem
 from app.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 from app.medplum_client import medplum_client
+from app.moss_client import moss_client
 
 logger = logging.getLogger("servare.extraction")
 
@@ -52,7 +53,10 @@ packed into it cause the check to silently miss a real contraindication.
 stated>, "status": "ordered" or "given", "source": <as above>}
 - "notes": any other explicitly stated case detail (age, sex, mechanism, chief complaint, PMH) \
 as a short sentence. Empty string if nothing notable.
-- "case_details": {"age": <string or "">, "sex": <string or "">, "mechanism": <string or "">}
+- "case_details": {"name": <string or "">, "age": <string or "">, "sex": <string or "">, \
+"mechanism": <string or "">}
+  "name" is the patient's own name, only when someone states it ("this is Ava Lennox", "the \
+mother says Ava has..."). Never a clinician's name, and never a guess.
   A number is only an age if it is stated as one ("nineteen year old female"). A GCS, a heart \
 rate, a blood pressure, a respiratory rate or a saturation is NEVER an age, even when a segment \
 boundary leaves it stranded on its own — "GCS 13" followed by "she's confused" describes a \
@@ -139,11 +143,16 @@ OUTPUT_SCHEMA = {
         "case_details": {
             "type": "object",
             "properties": {
+                # Identity is what lets semantic recall reach across cases: a moss
+                # document is tagged with the patient name, so "any prior drug
+                # reactions" can surface a note from a different encounter. With no
+                # name the search silently narrows to the current case only.
+                "name": {"type": "string"},
                 "age": {"type": "string"},
                 "sex": {"type": "string"},
                 "mechanism": {"type": "string"},
             },
-            "required": ["age", "sex", "mechanism"],
+            "required": ["name", "age", "sex", "mechanism"],
             "additionalProperties": False,
         },
         "tasks": {
@@ -389,6 +398,38 @@ async def run_extraction_and_persist(
 
     # --- facts ---------------------------------------------------------------
 
+    # Identity is resolved BEFORE any fact is persisted below. Every moss document
+    # is tagged with the patient name, and a single segment can state the name
+    # alongside a fact ("this is Ava Lennox, she has a penicillin allergy"). If the
+    # name were recorded afterwards, that fact would be indexed anonymously and
+    # would never surface on a later cross-case lookup for this patient.
+    details = extracted.get("case_details", {}) or {}
+    for key in ("name", "age", "sex", "mechanism"):
+        val = (details.get(key) or "").strip()
+        if val and not case.case_details.get(key):
+            case.case_details[key] = val
+            if key == "name" and case.patient_id:
+                try:
+                    await medplum_client.update_patient_name(case.patient_id, val)
+                except Exception:
+                    logger.exception(
+                        "medplum: failed to update patient name for case %s", case.case_id
+                    )
+
+    patient_name = case.case_details.get("name")
+
+    def _index(fact_type: str, text: str) -> None:
+        """Fire-and-forget semantic indexing.
+
+        Deliberately not awaited. index_fact makes two network round trips (write,
+        then reload so the very next query sees it), and this function sits on the
+        path between a drug being ordered and the contraindication being spoken —
+        a path measured at 26s that took real work to get there. Indexing is
+        best-effort by design and already swallows its own failures, so the only
+        thing awaiting it would buy is latency.
+        """
+        asyncio.create_task(moss_client.index_fact(case.case_id, patient_name, fact_type, text, now))
+
     for allergy in extracted.get("allergies", []):
         allergen = allergy.get("allergen", "").strip()
         if not allergen:
@@ -417,6 +458,7 @@ async def run_extraction_and_persist(
                 )
             except Exception:
                 logger.exception("medplum: failed to write allergy for case %s", case.case_id)
+        _index("allergy", f"Patient reported {allergen} allergy (source: {entry['source']})")
 
     for vital in extracted.get("vitals", []):
         name = vital.get("name", "").strip()
@@ -437,6 +479,7 @@ async def run_extraction_and_persist(
                 )
             except Exception:
                 logger.exception("medplum: failed to write vital for case %s", case.case_id)
+        _index("vital", f"{name} recorded as {value} (source: {entry['source']})")
 
     for med in extracted.get("medications", []):
         name = med.get("name", "").strip()
@@ -459,16 +502,14 @@ async def run_extraction_and_persist(
                 )
             except Exception:
                 logger.exception("medplum: failed to write medication for case %s", case.case_id)
+        _index("medication", f"{name} {entry['status']} (source: {entry['source']})")
 
     notes = extracted.get("notes", "").strip()
     if notes:
         case.notes.append(notes)
-
-    details = extracted.get("case_details", {}) or {}
-    for key in ("age", "sex", "mechanism"):
-        val = (details.get(key) or "").strip()
-        if val and not case.case_details.get(key):
-            case.case_details[key] = val
+        # Notes are the highest-value thing in this index: they are free text, so
+        # they are exactly what a structured Medplum lookup cannot reach.
+        _index("note", notes)
 
     # --- work ----------------------------------------------------------------
 

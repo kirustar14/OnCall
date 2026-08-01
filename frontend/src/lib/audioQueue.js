@@ -80,8 +80,25 @@ function playNext() {
   queue.sort(comparePriority);
   const next = queue.shift();
 
+  // onSpoken must fire exactly once per item. onended and onerror can both land
+  // on the same element, and a caller using this to dismiss a banner would
+  // otherwise schedule the same removal twice.
+  let spokenFired = false;
+  const fireSpoken = () => {
+    if (spokenFired) return;
+    spokenFired = true;
+    try {
+      next.onSpoken?.();
+    } catch (err) {
+      console.warn('onSpoken handler failed', err);
+    }
+  };
+
   if (!next.audioB64) {
-    // Nothing to actually speak (TTS unavailable/failed) — move straight on.
+    // Nothing to actually speak (TTS unavailable/failed). This item's turn in the
+    // queue is already over, so say so now rather than leaving a caller waiting
+    // on an event that will never come.
+    fireSpoken();
     playNext();
     return;
   }
@@ -93,6 +110,7 @@ function playNext() {
   } catch (err) {
     console.warn('failed to decode queued alert audio', err);
     setSpeaking(false);
+    fireSpoken();
     playNext();
     return;
   }
@@ -101,6 +119,7 @@ function playNext() {
   const finish = () => {
     URL.revokeObjectURL(url);
     setSpeaking(false);
+    fireSpoken();
     playNext();
   };
   audio.onended = finish;
@@ -115,9 +134,27 @@ function playNext() {
  * Add a spoken alert to the queue. Safe to call as often as alerts arrive — only
  * one will ever play at a time, in priority order. Purely additive: does not
  * affect anything visual (banners/Agent Log render immediately regardless).
+ *
+ * `onSpoken`, if given, fires exactly once for THIS item — when its audio ends,
+ * errors, is blocked, fails to decode, or (when there is no audio at all) right
+ * away — so a caller can tie something like dismissing a banner to this one
+ * alert's own playback, rather than to the state of the queue in general.
  */
-export function enqueueAlert({ id, caseId, caseStatus, urgency, seq, timestamp, audioB64, audioMime }) {
-  if (!audioB64) return;
+export function enqueueAlert({
+  id,
+  caseId,
+  caseStatus,
+  urgency,
+  seq,
+  timestamp,
+  audioB64,
+  audioMime,
+  onSpoken,
+}) {
+  if (!audioB64) {
+    onSpoken?.();
+    return;
+  }
   queue.push({
     id,
     caseId,
@@ -127,6 +164,7 @@ export function enqueueAlert({ id, caseId, caseStatus, urgency, seq, timestamp, 
     timestamp,
     audioB64,
     audioMime,
+    onSpoken,
   });
   playNext();
 }

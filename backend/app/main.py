@@ -18,6 +18,7 @@ from app.handoff import build_handoff
 from app.intent import classify_segment
 from app.intervention import check_for_conflicts
 from app.medplum_client import medplum_client
+from app.moss_client import moss_client
 from app.segmenter import UtteranceBuffer
 from app.vision import describe_scene
 from app.warmup import warm_schemas
@@ -55,6 +56,13 @@ async def _reapply_logging_config():
     restored = store.load()
     if restored:
         logger.info("restored %d case(s) from snapshot", restored)
+
+    if moss_client.configured:
+        # Build the client and load the index during boot rather than blocking the
+        # first live extraction. The SDK has an intermittent first-call auth race
+        # (see app/moss_client.py) that this absorbs, with retries, before any
+        # case is open.
+        asyncio.create_task(moss_client.warmup())
 
     global _watchdog_task
     _watchdog_task = asyncio.create_task(watchdog_loop())

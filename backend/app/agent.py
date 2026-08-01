@@ -23,6 +23,7 @@ import anthropic
 from app.case_store import Alert, CaseState, next_alert_seq, store
 from app.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 from app.medplum_client import medplum_client
+from app.moss_client import moss_client
 
 logger = logging.getLogger("servare.agent")
 
@@ -44,10 +45,17 @@ encounters. Do not limit yourself to allergy/medication conflicts — flag anyth
 relevant, including a medication that's inappropriate for the patient's stated age, even with no \
 allergy involved at all.
 
-Use your tools if you need more information before deciding:
-- web_search: for medication information, contraindications, drug classes, or age-appropriateness
-- search_patient_history: to check this patient's prior encounters, allergies, medications, or \
-notes recorded outside of this current case
+Use your tools if you need more information before deciding. Each is for a different kind of \
+lookup, so pick the one that actually fits rather than reaching for all of them or picking at random:
+- search_patient_history: structured, exact lookups in Medplum — the actual allergy, medication and \
+vital records on file for this patient, in this case and (when an identity is known) prior ones. Use \
+this when you need to know precisely what is documented.
+- semantic_patient_search: fuzzy, meaning-based recall across everything ever said or recorded for \
+this patient, including free-text notes, even when it is worded nothing like your query. "Any prior \
+drug reactions" can surface a note that said "got hives after amoxicillin" without sharing a single \
+keyword. Use it for anything that would only ever exist as a note rather than a structured field.
+- web_search: external clinical knowledge with nothing to do with this specific patient — drug \
+classes, contraindications, dosing references, definitions.
 
 You are an assistant who filters constantly, not a system that repeats itself. You will be shown \
 a list of issues you've already surfaced to the clinician earlier in this case. Before deciding to \
@@ -142,11 +150,16 @@ Speed matters — this answer gets spoken back to a clinician who is waiting. If
 confidently know the answer (a medical term definition, general clinical knowledge, or something \
 answerable straight from the case data shown to you), answer immediately — do NOT use a tool just \
 out of caution or habit. Only reach for a tool when you genuinely need information you don't \
-already have:
-- web_search: for medication safety, dosing limits, interactions, or other clinical facts you're \
-not confident about or that may have changed since your training
-- search_patient_history: for this patient's prior encounters, allergies, medications, or notes \
-recorded outside of this current case
+already have, and pick the one that actually fits:
+- search_patient_history: structured, exact lookups in Medplum — the allergy, medication and vital \
+records on file, this case and (when identity is known) prior ones.
+- semantic_patient_search: fuzzy, meaning-based recall across everything ever said or recorded for \
+this patient, including free-text notes, even worded nothing like your query ("any prior drug \
+reactions" can surface a note that said "got hives after amoxicillin"). Use it for recall a \
+structured lookup would miss.
+- web_search: external clinical knowledge with nothing to do with this specific patient — drug \
+safety, dosing limits, interactions, or facts you are not confident about or that may have changed \
+since your training.
 
 Decide for yourself, question by question — don't search when you already know the answer, and \
 don't skip searching when real clinical judgment requires information you don't have.
@@ -183,10 +196,47 @@ SEARCH_HISTORY_TOOL = {
     },
 }
 
-DEFAULT_TOOLS = [
-    {"type": "web_search_20260209", "name": "web_search", "max_uses": 4},
-    SEARCH_HISTORY_TOOL,
-]
+SEMANTIC_SEARCH_TOOL = {
+    "name": "semantic_patient_search",
+    "description": (
+        "Fuzzy, meaning-based recall across everything ever said or recorded for this patient — "
+        "including free-text notes — from any of their cases, even if it is worded completely "
+        "differently than your query. Finds what an exact lookup would miss, especially anything "
+        "that only ever existed as a note rather than a structured field (e.g. 'any prior adverse "
+        "drug reactions' can surface a note that said 'got hives after amoxicillin', with no "
+        "shared keywords)."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": (
+                    "What you are trying to recall, in plain language, e.g. "
+                    "'prior reaction to an antibiotic'"
+                ),
+            }
+        },
+        "required": ["query"],
+        "additionalProperties": False,
+    },
+}
+
+
+def _build_tools() -> list[dict]:
+    """Offer semantic recall only when it can actually answer.
+
+    An advertised tool that always returns nothing is worse than an absent one:
+    the model spends a turn calling it, gets an empty result, and may conclude the
+    patient has no prior history rather than that the index is switched off.
+    """
+    tools = [
+        {"type": "web_search_20260209", "name": "web_search", "max_uses": 4},
+        SEARCH_HISTORY_TOOL,
+    ]
+    if moss_client.configured:
+        tools.append(SEMANTIC_SEARCH_TOOL)
+    return tools
 
 
 def _parse_decision(text: str) -> dict[str, Any]:
@@ -328,6 +378,31 @@ async def search_patient_history(case: CaseState, query: str) -> str:
     return f"Query: {query}\n\n" + "\n".join(findings)
 
 
+async def search_patient_semantic(case: CaseState, query: str) -> str:
+    """The semantic_patient_search tool's implementation — moss.dev fuzzy recall
+    across everything captured for this patient (by name when known, else scoped
+    to this case), including the free-text notes that search_patient_history's
+    structured Medplum lookup cannot reach at all."""
+
+    name = (case.case_details.get("name") or "").strip()
+    results = await moss_client.search(
+        query, patient_name=name or None, case_id=case.case_id, top_k=5
+    )
+
+    if not results:
+        scope = f"a patient named '{name}'" if name else "this case (no patient name recorded yet)"
+        return f"No semantically related facts found for {scope}."
+
+    lines = []
+    for r in results:
+        meta = r["metadata"]
+        other_case = meta.get("case_id", "")
+        case_note = f" [case {other_case[:8]}]" if other_case and other_case != case.case_id else ""
+        lines.append(f'- "{r["text"]}"{case_note} (relevance {r["score"]:.2f})')
+
+    return f"Query: {query}\n\n" + "\n".join(lines)
+
+
 def _time_ago(timestamp: float) -> str:
     seconds = max(0, time.time() - timestamp)
     if seconds < 60:
@@ -396,6 +471,8 @@ async def _emit_server_tool_steps(response, on_step: OnStep) -> None:
 async def _execute_custom_tool(name: str, tool_input: dict, case: CaseState) -> str:
     if name == "search_patient_history":
         return await search_patient_history(case, tool_input.get("query", ""))
+    if name == "semantic_patient_search":
+        return await search_patient_semantic(case, tool_input.get("query", ""))
     return f"Unknown tool: {name}"
 
 
@@ -407,7 +484,7 @@ async def _run_reasoning_loop(
     (unparsed) text response."""
 
     if tools is None:
-        tools = DEFAULT_TOOLS
+        tools = _build_tools()
 
     messages = [{"role": "user", "content": user_message}]
 

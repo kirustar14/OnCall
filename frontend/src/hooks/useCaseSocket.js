@@ -67,6 +67,21 @@ export function useCaseSocket(caseId, onAgentStep) {
 
   useEffect(() => {
     let cancelled = false;
+    const dismissTimers = new Set();
+
+    // A banner clears itself once the room has actually heard it, rather than
+    // sitting on screen until something else replaces it. Two steps, because
+    // dropping it from state outright would make it vanish instead of fade.
+    function dismissAlert(alertId) {
+      if (cancelled) return;
+      setAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, leaving: true } : a)));
+      const timer = setTimeout(() => {
+        dismissTimers.delete(timer);
+        if (cancelled) return;
+        setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+      }, 320);
+      dismissTimers.add(timer);
+    }
 
     function handleMessage(msg) {
       if (msg.type === 'transcript') {
@@ -110,6 +125,7 @@ export function useCaseSocket(caseId, onAgentStep) {
           timestamp: msg.alert.timestamp,
           audioB64: msg.audio_b64,
           audioMime: msg.audio_mime,
+          onSpoken: () => dismissAlert(msg.alert.id),
         });
       } else if (msg.type === 'unowned_prompt') {
         setUnownedPrompt(msg);
@@ -197,6 +213,8 @@ export function useCaseSocket(caseId, onAgentStep) {
 
     return () => {
       cancelled = true;
+      dismissTimers.forEach(clearTimeout);
+      dismissTimers.clear();
       stopAudioCapture(audioCaptureRef.current);
       audioCaptureRef.current = null;
       playbackRef.current?.stop();
