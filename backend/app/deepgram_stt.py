@@ -10,6 +10,7 @@ on_transcript(text, is_final) callback as they arrive.
 import asyncio
 import json
 import logging
+import time
 from typing import Awaitable, Callable, Optional
 
 import websockets
@@ -30,6 +31,8 @@ KEYTERMS = [
     "vancomycin",
     "anticoagulated",
     "tranexamic acid",
+    "Medic",
+    "GCS thirteen",
     "tibia",
     "fentanyl",
     "GCS",
@@ -60,6 +63,14 @@ def _dominant_speaker(words: list[dict]) -> Optional[int]:
     return max(counts.items(), key=lambda kv: kv[1])[0]
 
 
+# Deepgram closes a connection that receives nothing within its timeout window
+# ("Deepgram did not receive audio data or a text message within the timeout
+# window", close code 1011). A trauma bay is not continuously loud, and a case
+# is often opened before anyone speaks — without a keepalive the socket dies
+# during the first quiet stretch and never comes back.
+KEEPALIVE_INTERVAL_SECONDS = 5.0
+
+
 class DeepgramSTTSession:
     """on_transcript(text, is_final, speaker_index) — speaker_index is None when
     diarization has not resolved a speaker for the segment."""
@@ -68,6 +79,8 @@ class DeepgramSTTSession:
         self._on_transcript = on_transcript
         self._ws: Optional[websockets.ClientConnection] = None
         self._reader_task: Optional[asyncio.Task] = None
+        self._keepalive_task: Optional[asyncio.Task] = None
+        self._last_send: float = 0.0
 
     async def start(self) -> None:
         if not DEEPGRAM_API_KEY:
@@ -82,7 +95,26 @@ class DeepgramSTTSession:
             logger.exception("failed to connect to Deepgram")
             self._ws = None
             return
+        self._last_send = time.monotonic()
         self._reader_task = asyncio.create_task(self._read_loop())
+        self._keepalive_task = asyncio.create_task(self._keepalive_loop())
+
+    async def _keepalive_loop(self) -> None:
+        """Hold the connection open through silence."""
+        try:
+            while self._ws is not None:
+                await asyncio.sleep(1.0)
+                if self._ws is None:
+                    return
+                if time.monotonic() - self._last_send < KEEPALIVE_INTERVAL_SECONDS:
+                    continue
+                try:
+                    await self._ws.send(json.dumps({"type": "KeepAlive"}))
+                    self._last_send = time.monotonic()
+                except Exception:
+                    return
+        except asyncio.CancelledError:
+            raise
 
     async def _read_loop(self) -> None:
         if self._ws is None:
@@ -120,10 +152,14 @@ class DeepgramSTTSession:
             return
         try:
             await self._ws.send(chunk)
+            self._last_send = time.monotonic()
         except Exception:
             logger.exception("failed to send audio chunk to Deepgram")
 
     async def finish(self) -> None:
+        if self._keepalive_task is not None:
+            self._keepalive_task.cancel()
+            self._keepalive_task = None
         if self._ws is None:
             return
         try:

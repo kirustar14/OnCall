@@ -26,6 +26,12 @@ from app.ws_manager import ws_manager
 logger = logging.getLogger("servare.watchdog")
 
 POLL_INTERVAL_SECONDS = 2.0
+# Minimum gap between spoken prompts for the same case. Three unowned items
+# arriving together would otherwise be announced back-to-back-to-back, which is
+# how a safety system trains a room to ignore it.
+PROMPT_COOLDOWN_SECONDS = 25.0
+
+_last_prompt_at: dict[str, float] = {}
 
 
 def _find_orphan(case: CaseState, now: float) -> WorkItem | None:
@@ -83,11 +89,14 @@ async def watchdog_loop() -> None:
         try:
             now = time.time()
             for case in store.open_cases():
+                if now - _last_prompt_at.get(case.case_id, 0.0) < PROMPT_COOLDOWN_SECONDS:
+                    continue
                 orphan = _find_orphan(case, now)
                 if orphan is None:
                     continue
                 # Mark before announcing so a slow TTS call can't double-fire.
                 orphan.prompted_at = now
+                _last_prompt_at[case.case_id] = now
                 await _announce(case, orphan)
         except asyncio.CancelledError:
             raise

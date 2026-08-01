@@ -38,6 +38,7 @@ from app.intervention import (
     _spoken_alert,
 )
 from app.medplum_client import MedplumClient, _trigger_seconds
+from app.segmenter import MAX_CHARS, QUIET_SECONDS, UtteranceBuffer
 from app.watchdog import _find_orphan, _prompt_text
 
 # --- ground truth from Medplum's generated FHIR types -------------------------
@@ -432,6 +433,68 @@ def test_conflict_prefilter() -> None:
     check("prefilter: sulfa allergy does not fire on ampicillin-sulbactam", len(pairs) == 0, f"got {len(pairs)}")
 
 
+# --- 8c. utterance buffering -------------------------------------------------
+
+
+async def test_segmenter() -> None:
+    """Deepgram finalizes on acoustic boundaries, not sentence boundaries.
+    Extracting per raw segment lost a vital across a seam and split a claim
+    from its own second half, so the task it claimed was never resolved."""
+
+    async def collect(sink):
+        async def handler(text, speaker):
+            sink.append((text, speaker))
+        return handler
+
+    # The measured failure: a 16-char fragment mis-diarized onto the person who
+    # had just asked for the task.
+    got = []
+    buf = UtteranceBuffer(on_utterance=await collect(got))
+    await buf.add("I've got ortho.", 1)          # actually the nurse
+    await buf.add("I'm calling them now.", 2)    # nurse
+    await buf.close()
+    check("segmenter: short fragment merges across a speaker change", len(got) == 1, f"got {got}")
+    check("segmenter: merged text keeps both halves", "ortho" in got[0][0] and "calling" in got[0][0], got[0][0])
+    check(
+        "segmenter: merged turn attributed to whoever said more of it",
+        got[0][1] == 2,
+        f"attributed to speaker {got[0][1]}, expected 2",
+    )
+
+    # A real turn change must still split.
+    got = []
+    buf = UtteranceBuffer(on_utterance=await collect(got))
+    await buf.add("Okay, someone find out whether she's anticoagulated and get ortho down here.", 1)
+    await buf.add("I've got ortho, I'm calling them right now.", 2)
+    await buf.close()
+    check("segmenter: substantial turns still split on speaker change", len(got) == 2, f"got {len(got)}")
+    check("segmenter: first turn keeps its speaker", got[0][1] == 1)
+    check("segmenter: second turn keeps its speaker", got[1][1] == 2)
+
+    # Fragments from one speaker join into a single utterance (the lost-GCS case).
+    got = []
+    buf = UtteranceBuffer(on_utterance=await collect(got))
+    await buf.add("respirations 22, sat 97 on four liters, GCS", 0)
+    await buf.add("13, she's confused, she can't give us a history", 0)
+    await buf.close()
+    check("segmenter: same-speaker fragments join", len(got) == 1, f"got {len(got)}")
+    check("segmenter: the value split across the seam survives", "GCS 13" in got[0][0], got[0][0])
+
+    # Long monologue flushes without waiting for quiet.
+    got = []
+    buf = UtteranceBuffer(on_utterance=await collect(got))
+    await buf.add("x" * (MAX_CHARS + 10), 0)
+    check("segmenter: over-length flushes immediately", len(got) == 1)
+
+    # Quiet gap flushes on its own.
+    got = []
+    buf = UtteranceBuffer(on_utterance=await collect(got))
+    await buf.add("Pressure is 100 over 60 now.", 0)
+    check("segmenter: nothing flushed yet while still speaking", len(got) == 0)
+    await asyncio.sleep(QUIET_SECONDS + 0.4)
+    check("segmenter: quiet gap flushes the utterance", len(got) == 1, f"got {got}")
+
+
 # --- 9. snapshot schema drift ------------------------------------------------
 
 
@@ -476,6 +539,7 @@ def main() -> int:
     test_persistence()
     test_no_recommendations()
     test_conflict_prefilter()
+    asyncio.run(test_segmenter())
     test_snapshot_drift()
 
     for name in PASSED:

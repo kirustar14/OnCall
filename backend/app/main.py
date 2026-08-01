@@ -15,6 +15,7 @@ from app.handoff import build_handoff
 from app.intervention import check_for_conflicts
 from app.medplum_client import medplum_client
 from app.query import answer_question
+from app.segmenter import UtteranceBuffer
 from app.warmup import warm_schemas
 from app.watchdog import watchdog_loop
 from app.ws_manager import ws_manager
@@ -221,6 +222,32 @@ async def case_ws(websocket: WebSocket, case_id: str):
 
     loop = asyncio.get_running_loop()
 
+    # Extraction is STATEFUL — the open ledger is passed into every call so that
+    # "I've got ortho" can resolve a task created by an earlier utterance. That
+    # makes concurrency a correctness bug, not just a performance question:
+    # dispatching each utterance with create_task let the claim be extracted
+    # before the request it answers had finished being written, so it saw an
+    # empty ledger and silently resolved nothing. One worker, strict FIFO.
+    utterances: asyncio.Queue = asyncio.Queue()
+
+    async def utterance_worker() -> None:
+        while True:
+            text, speaker_label = await utterances.get()
+            try:
+                await _handle_finalized_segment(case, text, speaker_label)
+            except Exception:
+                logger.exception("utterance handling failed for case %s", case_id)
+            finally:
+                utterances.task_done()
+
+    worker = asyncio.create_task(utterance_worker())
+
+    async def on_utterance(text: str, speaker_index: int | None) -> None:
+        """A whole utterance, not an acoustic fragment. See app/segmenter.py."""
+        await utterances.put((text, case.speaker_label(speaker_index)))
+
+    buffer = UtteranceBuffer(on_utterance=on_utterance)
+
     async def on_transcript(text: str, is_final: bool, speaker_index: int | None = None) -> None:
         speaker_label = case.speaker_label(speaker_index)
         entry = TranscriptEntry(
@@ -234,6 +261,8 @@ async def case_ws(websocket: WebSocket, case_id: str):
             case.transcript_entries.append(entry)
             case.running_transcript = (case.running_transcript + " " + text).strip()
 
+        # The UI shows segments as they land — the transcript should feel live
+        # even though extraction waits for a complete utterance.
         await ws_manager.send_json(
             case_id,
             {
@@ -246,7 +275,7 @@ async def case_ws(websocket: WebSocket, case_id: str):
         )
 
         if is_final and text.strip():
-            asyncio.create_task(_handle_finalized_segment(case, text, speaker_label))
+            await buffer.add(text, speaker_index)
 
     stt_session = DeepgramSTTSession(on_transcript=on_transcript)
     try:
@@ -273,6 +302,14 @@ async def case_ws(websocket: WebSocket, case_id: str):
         pass
     finally:
         await stt_session.finish()
+        await buffer.close()  # don't lose a half-finished utterance
+        # Let queued utterances finish before tearing down — the last thing said
+        # is often the medication order, and dropping it loses the safety check.
+        try:
+            await asyncio.wait_for(utterances.join(), timeout=30)
+        except asyncio.TimeoutError:
+            logger.warning("utterance queue did not drain for case %s", case_id)
+        worker.cancel()
         store.close(case_id)
         store.save()
         if case.encounter_id and medplum_client.configured:
