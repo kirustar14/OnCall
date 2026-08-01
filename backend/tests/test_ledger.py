@@ -487,13 +487,30 @@ async def test_segmenter() -> None:
     await buf.add("x" * (MAX_CHARS + 10), 0)
     check("segmenter: over-length flushes immediately", len(got) == 1)
 
-    # Quiet gap flushes on its own.
+    # UtteranceEnd from Deepgram is the real cue — flush immediately, without
+    # waiting out the fallback timer.
+    got = []
+    buf = UtteranceBuffer(on_utterance=await collect(got))
+    await buf.add("respirations 22, sat 97 on four liters, GCS", 0)
+    await buf.add("13, she's confused", 0)
+    check("segmenter: holds while Deepgram is still delivering", len(got) == 0)
+    await buf.flush_now()
+    check("segmenter: UtteranceEnd flushes at once", len(got) == 1, f"got {got}")
+    check("segmenter: the joined utterance keeps GCS with its value", "GCS 13" in got[0][0], got[0][0])
+
+    # flush_now on an empty buffer must be a no-op, not an empty utterance.
+    got = []
+    buf = UtteranceBuffer(on_utterance=await collect(got))
+    await buf.flush_now()
+    check("segmenter: UtteranceEnd on an empty buffer emits nothing", len(got) == 0)
+
+    # The timer is a fallback for when UtteranceEnd never arrives.
     got = []
     buf = UtteranceBuffer(on_utterance=await collect(got))
     await buf.add("Pressure is 100 over 60 now.", 0)
     check("segmenter: nothing flushed yet while still speaking", len(got) == 0)
     await asyncio.sleep(QUIET_SECONDS + 0.4)
-    check("segmenter: quiet gap flushes the utterance", len(got) == 1, f"got {got}")
+    check("segmenter: fallback timer still flushes", len(got) == 1, f"got {got}")
 
 
 # --- 8d. FDA class verification + prompt caching ------------------------------

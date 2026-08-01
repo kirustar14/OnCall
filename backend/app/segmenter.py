@@ -24,8 +24,11 @@ from typing import Awaitable, Callable, Optional
 
 logger = logging.getLogger("servare.segmenter")
 
-# How long the room must be quiet before we treat an utterance as finished.
-QUIET_SECONDS = 1.3
+# Fallback only. Deepgram's UtteranceEnd is the real cue (see flush_now); this
+# timer just guarantees an utterance eventually flushes if that event never
+# arrives. Deliberately longer than utterance_end_ms so it doesn't pre-empt it
+# and cut a sentence in half — which is exactly the bug UtteranceEnd fixes.
+QUIET_SECONDS = 2.6
 # Flush early if someone monologues, so a long EMS handoff doesn't stall.
 MAX_CHARS = 600
 # A fragment this short sitting on a speaker change is much more likely a
@@ -109,6 +112,20 @@ class UtteranceBuffer:
             await self._on_utterance(text, speaker)
         except Exception:
             logger.exception("utterance handler failed")
+
+    async def flush_now(self) -> None:
+        """Deepgram observed real silence — the speaker is genuinely finished.
+
+        This is a better cue than the quiet timer, which measures how long since
+        a final *arrived*. Consecutive finals from continuous speech can land
+        more than a second apart, and flushing on that split "…passenger GCS"
+        from "13, she's confused" and lost the vital. The timer stays as a
+        fallback for when UtteranceEnd doesn't arrive.
+        """
+        if self._timer and not self._timer.done():
+            self._timer.cancel()
+        async with self._lock:
+            await self._flush_locked()
 
     async def close(self) -> None:
         """Flush whatever is left — a case shouldn't end mid-sentence."""

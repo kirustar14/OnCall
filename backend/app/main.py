@@ -279,7 +279,12 @@ async def case_ws(websocket: WebSocket, case_id: str):
         if is_final and text.strip():
             await buffer.add(text, speaker_index)
 
-    stt_session = DeepgramSTTSession(on_transcript=on_transcript)
+    stt_session = DeepgramSTTSession(
+        on_transcript=on_transcript,
+        # Real silence, from Deepgram, rather than a guess based on how long ago
+        # a final happened to arrive.
+        on_utterance_end=buffer.flush_now,
+    )
     try:
         await stt_session.start()
     except Exception:

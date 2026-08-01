@@ -46,6 +46,13 @@ DEEPGRAM_LISTEN_URL = (
     "&channels=1&interim_results=true&smart_format=true&punctuate=true&endpointing=300"
     # Who said it. Without this, "who owns this task" has no input at all.
     "&diarize=true"
+    # Deepgram emits an explicit UtteranceEnd after this much *speech* silence.
+    # That is the signal the utterance buffer actually wants: a wall-clock timer
+    # started when a final arrives measures Deepgram's delivery cadence, not a
+    # pause in the room, and it split "…passenger GCS" from "13, she's confused"
+    # mid-sentence — losing the GCS entirely.
+    "&utterance_end_ms=1000"
+    # UtteranceEnd is only emitted when interim results are on.
     + "".join(f"&keyterm={term.replace(' ', '%20')}" for term in KEYTERMS)
 )
 
@@ -83,8 +90,15 @@ class DeepgramSTTSession:
     """on_transcript(text, is_final, speaker_index) — speaker_index is None when
     diarization has not resolved a speaker for the segment."""
 
-    def __init__(self, on_transcript: Callable[[str, bool, Optional[int]], Awaitable[None]]):
+    def __init__(
+        self,
+        on_transcript: Callable[[str, bool, Optional[int]], Awaitable[None]],
+        on_utterance_end: Optional[Callable[[], Awaitable[None]]] = None,
+    ):
         self._on_transcript = on_transcript
+        # Fired when Deepgram observes real silence — the cue that a speaker has
+        # actually finished, as opposed to a gap in delivery.
+        self._on_utterance_end = on_utterance_end
         self._ws: Optional[websockets.ClientConnection] = None
         self._reader_task: Optional[asyncio.Task] = None
         self._keepalive_task: Optional[asyncio.Task] = None
@@ -148,6 +162,14 @@ class DeepgramSTTSession:
                 try:
                     msg = json.loads(raw)
                 except (json.JSONDecodeError, TypeError):
+                    continue
+
+                if msg.get("type") == "UtteranceEnd":
+                    if self._on_utterance_end is not None:
+                        try:
+                            await self._on_utterance_end()
+                        except Exception:
+                            logger.exception("on_utterance_end callback failed")
                     continue
 
                 if msg.get("type") != "Results":
