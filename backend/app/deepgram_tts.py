@@ -18,7 +18,10 @@ logger = logging.getLogger("servare.deepgram_tts")
 # specific error. That's also the top of the requested 1.4-1.5x range, so no
 # need to additionally stack a frontend playbackRate hack on top (which would
 # shift pitch, unlike this).
-TTS_SPEED = 1.5
+# Backed off from the 1.5 cap. 1.5 is intelligible in isolation, but consonants
+# go first and "ampicillin-sulbactam" is the one word the whole interrupt turns
+# on. 1.35 costs about half a second on a 22-word alert and buys those back.
+TTS_SPEED = 1.35
 
 DEEPGRAM_SPEAK_URL = f"https://api.deepgram.com/v1/speak?model=aura-2-asteria-en&encoding=mp3&speed={TTS_SPEED}"
 

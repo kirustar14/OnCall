@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startAudioCapture, stopAudioCapture } from '../lib/audioCapture';
 import { startFilePlayback } from '../lib/filePlayback';
+import { createFrameGrabber } from '../lib/frameCapture';
 import { enqueueAlert } from '../lib/audioQueue';
 
 const WS_BASE = import.meta.env.VITE_WS_BASE || `ws://${window.location.hostname}:8000`;
@@ -39,10 +40,15 @@ export function useCaseSocket(caseId, onAgentStep) {
   // downstream can tell the difference.
   const [inputMode, setInputModeState] = useState('mic');
   const [playback, setPlayback] = useState(null); // { name, progress, duration }
+  // The last POV frame the agent looked at, with what it saw. Kept so a human
+  // can check the picture against what was said about it.
+  const [lastLook, setLastLook] = useState(null);
+  const [looking, setLooking] = useState(false);
 
   const wsRef = useRef(null);
   const audioCaptureRef = useRef(null);
   const mediaStreamRef = useRef(null);
+  const grabberRef = useRef(null);
   const inputModeRef = useRef('mic');
   const playbackRef = useRef(null);
 
@@ -148,6 +154,9 @@ export function useCaseSocket(caseId, onAgentStep) {
         }
         mediaStreamRef.current = media;
         setVideoStream(media);
+        // Hold a grabber on the stream so a capture is instant rather than
+        // spinning up a video element at the moment someone needs an answer.
+        grabberRef.current = createFrameGrabber(media);
 
         const ws = new WebSocket(`${WS_BASE}/ws/case/${caseId}`);
         ws.binaryType = 'arraybuffer';
@@ -259,6 +268,42 @@ export function useCaseSocket(caseId, onAgentStep) {
     }
   }, []);
 
+  /**
+   * Look at what the wearer is looking at, right now.
+   *
+   * Deliberately on demand rather than a background loop. A frame is only
+   * interesting at a moment somebody cares about — and continuously shipping
+   * the room to a model is both wasteful and a much harder thing to defend.
+   */
+  const look = useCallback(async () => {
+    const grabber = grabberRef.current;
+    if (!grabber || looking) return;
+
+    setLooking(true);
+    try {
+      const frame = await grabber.capture();
+      if (!frame) return;
+
+      const res = await fetch(`${API_BASE}/api/observe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          case_id: caseId,
+          image_b64: frame.base64,
+          media_type: 'image/jpeg',
+        }),
+      });
+      const observation = await res.json();
+      // Keep the picture next to the claim so the reading can be checked
+      // against what was actually on screen.
+      setLastLook({ dataUrl: frame.dataUrl, observation, at: Date.now() });
+    } catch (err) {
+      console.error('look failed', err);
+    } finally {
+      setLooking(false);
+    }
+  }, [caseId, looking]);
+
   const stopPlayback = useCallback(() => {
     playbackRef.current?.stop();
     playbackRef.current = null;
@@ -329,6 +374,9 @@ export function useCaseSocket(caseId, onAgentStep) {
     handoffLoading,
     inputMode,
     playback,
+    lastLook,
+    looking,
+    look,
     endCase,
     assignSpeakerRole,
     requestHandoff,

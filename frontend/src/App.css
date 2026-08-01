@@ -1226,3 +1226,195 @@ body {
   letter-spacing: 0.05em;
   opacity: 0.62;
 }
+
+/* ---------- point of view ---------- */
+
+.pov-look {
+  margin-top: 16px;
+  background: #14161b;
+  border: 1px solid #262a33;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.pov-look-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 9px;
+  flex-wrap: wrap;
+}
+
+.pov-look-head h4 {
+  margin: 0;
+  flex: 1;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8a919e;
+}
+
+.pov-proxy {
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #5b616c;
+}
+
+.look-btn {
+  width: 100%;
+  background: #1b2b47;
+  border: 1px solid #2a3a6a;
+  color: #cfe0ff;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.look-btn:hover:not(:disabled) {
+  background: #223458;
+}
+
+.look-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pov-result {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #262a33;
+}
+
+.pov-frame {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #262a33;
+  display: block;
+}
+
+.pov-scene {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #8a919e;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pov-confidence {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+}
+
+.pov-confidence.clear {
+  background: #0f3d33;
+  color: #35d0a5;
+  border: 1px solid #1c4a3e;
+}
+
+.pov-confidence.partial {
+  background: #3a2a08;
+  color: #f0a840;
+  border: 1px solid #6b5117;
+}
+
+.pov-confidence.poor {
+  background: #2a2d35;
+  color: #8a919e;
+  border: 1px solid #3a3f4a;
+}
+
+.pov-description {
+  margin: 7px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #c6cad3;
+}
+
+/* Readings are the one place the system shows a number it did not hear. The
+   banner is not decoration — it is the reason this is allowed at all. */
+.pov-readings {
+  margin-top: 9px;
+  border: 1px solid #4a3a1c;
+  border-radius: 6px;
+  background: #1a1408;
+  overflow: hidden;
+}
+
+.pov-readings-head {
+  padding: 4px 9px;
+  font-size: 9.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f0a840;
+  background: #241c0d;
+  border-bottom: 1px solid #4a3a1c;
+}
+
+.pov-reading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.pov-reading-label {
+  flex: 1;
+  color: #8a919e;
+}
+
+.pov-reading-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+  color: #e8eaed;
+}
+
+.pov-legibility {
+  font-size: 9.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.pov-legibility.clear {
+  color: #7fd6a0;
+  background: #17301f;
+}
+
+.pov-legibility.partial {
+  color: #f0a840;
+  background: #2a2008;
+}
+
+.pov-legibility.guessing {
+  color: #ff8a80;
+  background: #2e0f12;
+}
+
+.pov-people {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: #8a919e;
+}
+
+.pov-prompt {
+  margin: 9px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #10151f;
+  border: 1px solid #2a3a6a;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #cfe0ff;
+}

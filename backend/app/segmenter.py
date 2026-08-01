@@ -26,9 +26,17 @@ logger = logging.getLogger("servare.segmenter")
 
 # Fallback only. Deepgram's UtteranceEnd is the real cue (see flush_now); this
 # timer just guarantees an utterance eventually flushes if that event never
-# arrives. Deliberately longer than utterance_end_ms so it doesn't pre-empt it
-# and cut a sentence in half — which is exactly the bug UtteranceEnd fixes.
-QUIET_SECONDS = 2.6
+# arrives.
+#
+# It has to clear the gap between consecutive *finals*, not the gap between
+# sentences. Measured on the demo clip, finals from one continuous 28s handoff
+# arrived 3.7s and 4.0s apart, so 2.6s fired between nearly every pair and the
+# buffer merged almost nothing: 12 finals became 11 extractions, and the queue
+# then ran at ~92% utilisation and pushed the conflict alert 29s behind the room.
+# 5.0s sits well above the observed 4.0s worst case and well above
+# utterance_end_ms (2.0s), so UtteranceEnd wins in every normal case and this is
+# a genuine backstop. End-of-clip is covered by Finalize and close(), not here.
+QUIET_SECONDS = 5.0
 # Flush early if someone monologues, so a long EMS handoff doesn't stall.
 MAX_CHARS = 600
 # A fragment this short sitting on a speaker change is much more likely a

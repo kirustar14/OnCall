@@ -1,34 +1,76 @@
 # Servare
 
-A clinician-facing, always-on voice agent for the ER. Transcribes live speech, extracts
-structured clinical data into Medplum (FHIR), detects allergy/medication conflicts, and
-speaks interventions back to the doctor.
+**Servare listens to the room, keeps the record nobody has time to write, and speaks up only
+when the room contradicts itself.**
 
-Hackathon MVP — uses the laptop's own camera and microphone. The input source (`getUserMedia`
-audio capture in `frontend/src/lib/audioCapture.js`) is isolated behind a small module so it can
-be swapped for a glasses feed later without touching the rest of the pipeline.
+A trauma bay produces more facts per minute than any one person can hold, and almost none of
+them get written down while they still matter. A detail said once at 2am. A task handed out by
+voice with no ticket behind it. An hour of context the person arriving at shift change simply
+does not have. The failure is not skill. It is that spoken information has no memory.
+
+Servare gives it one. Voice in, voice out. Nobody stops to type, and there is no screen anyone
+has to look at.
+
+## What it does
+
+| | |
+|---|---|
+| **Details** | Every clinical fact said out loud becomes a structured FHIR resource, carrying the exact quote and who said it. |
+| **Tasks** | Every request said out loud becomes a tracked FHIR `Task`. If nobody was named, it stays unowned, and the agent chases it out loud. |
+| **Context** | Anyone walking in cold asks once and gets a spoken catch-up in twenty seconds. |
+
+Details, tasks, context. That is the whole product.
+
+## The flow
+
+```
+room audio ─► Deepgram ─────────► Claude Opus 5 ─► Medplum FHIR ─► Deepgram ──► spoken
+              nova-3-medical      structured        Task              Aura-2      back into
+              diarized            extraction        Provenance                    the room
+              medical vocabulary  stateful ledger   AllergyIntolerance
+
+  ├─ a point-of-view camera frame informs context, and never writes a clinical value
+  ├─ a watchdog runs on a timer, so unowned work gets chased even when the room is silent
+  └─ before any interrupt, the allergy is checked against the FDA drug class of the order
+```
+
+## Why it can be trusted to interrupt
+
+Two tiers, and only one of them is allowed to raise its voice.
+
+**Tier 1 is deterministic and externally verified.** It crosses the documented allergies against
+the medication just ordered, resolves the drug through NIH RxNav to its FDA Established
+Pharmacologic Class, and fires only on a real class match. "Ampicillin-sulbactam" shares no
+substring with "penicillin", so a keyword matcher misses it entirely. The FDA class does not.
+This tier cannot invent a conflict, because it is not the thing deciding one exists.
+
+**Tier 2 is an open-ended agent, read-only and advisory.** It notices what no rule could
+enumerate ahead of time. It never writes to the ledger and never promotes itself to critical.
+
+## What it will not do
+
+Servare states facts and where they came from. It does **not** recommend treatment. No suggested
+alternative drug, no "give this instead". When an ordered medication belongs to a class the
+patient is documented allergic to, it says exactly that, names when the allergy was recorded and
+who it came from, and stops. The clinician draws the conclusion.
+
+That boundary is deliberate. Software that recommends a therapy is a different regulatory and
+liability object than software that surfaces information a clinician can independently review,
+and the second is the honest description of what a language model is reliably good at. It is
+also why every assertion carries a `Provenance` resource, so the basis is inspectable rather
+than trusted. `backend/tests/test_ledger.py` asserts the boundary so it cannot quietly drift
+back.
 
 ## Stack
 
 - **Frontend:** React + Vite (`frontend/`)
 - **Backend:** FastAPI with WebSocket audio streaming (`backend/`)
-- **Voice:** Deepgram (streaming STT + TTS)
+- **Voice:** Deepgram — streaming `nova-3-medical` STT with keyterm prompting, diarization and
+  `UtteranceEnd` endpointing; Aura-2 TTS out
 - **Clinical data:** Medplum (FHIR), OAuth2 client-credentials auth
-- **Reasoning:** Anthropic Claude (structured extraction, ledger resolution, drug-class conflict
-  reasoning, handoff synthesis)
-
-### What it will not do
-
-Servare states facts and where they came from. It does **not** recommend treatment — no
-suggested alternative drug, no "give this instead". When an ordered medication belongs to a
-class the patient is documented allergic to, it says exactly that, names when the allergy was
-recorded and who it came from, and stops. The clinician draws the conclusion.
-
-That boundary is deliberate: software that recommends a therapy is a different regulatory and
-liability object than software that surfaces information a clinician can independently review,
-and the second is the honest description of what a language model is reliably good at. It is
-also why every assertion carries a `Provenance` resource — the basis is inspectable rather than
-trusted. `backend/tests/test_ledger.py` asserts the boundary so it can't quietly drift back.
+- **Reasoning:** Claude Opus 5 (structured extraction, stateful ledger resolution, conflict
+  basis, handoff synthesis)
+- **Drug classes:** NIH RxNav, for the FDA class that makes an interrupt a fact instead of a guess
 
 ## Setup
 

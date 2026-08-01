@@ -19,6 +19,7 @@ from app.intent import classify_segment
 from app.intervention import check_for_conflicts
 from app.medplum_client import medplum_client
 from app.segmenter import UtteranceBuffer
+from app.vision import describe_scene
 from app.warmup import warm_schemas
 from app.watchdog import watchdog_loop
 from app.ws_manager import ws_manager
@@ -195,6 +196,66 @@ async def set_speaker_role(req: SpeakerRoleRequest):
     return {"speaker_roles": {str(k): v for k, v in case.speaker_roles.items()}}
 
 
+class ObserveRequest(BaseModel):
+    case_id: str
+    image_b64: str
+    media_type: str = "image/jpeg"
+
+
+@app.post("/api/observe")
+async def observe(req: ObserveRequest):
+    """Describe a point-of-view frame.
+
+    Vision informs; speech records. Nothing returned here is written into
+    vitals, allergies or medications — a reading off a screen is offered for a
+    human to confirm, never documented. That boundary is why a camera can be in
+    the loop at all without weakening the claim that every recorded fact has a
+    source you can check.
+    """
+    case = store.get(req.case_id)
+    if case is None:
+        return {"error": f"No such case: {req.case_id}"}
+
+    result = await describe_scene(
+        req.image_b64,
+        req.media_type,
+        open_ledger=case.open_ledger_for_prompt(),
+    )
+
+    await _emit_agent_step(
+        case,
+        {
+            "stage": "vision",
+            "detail": result.get("description", "") or "nothing clinically relevant in frame",
+            "evidence": ", ".join(
+                f"{r['label']} appears to read {r['value']} ({r['legibility']})"
+                for r in result.get("readings", [])
+            ),
+        },
+    )
+
+    # Only interrupt when the frame genuinely bears on outstanding work.
+    spoken = (result.get("prompt_the_room") or "").strip()
+    if spoken:
+        await _speak_alert(
+            case,
+            Alert(
+                id=str(uuid.uuid4()),
+                text=spoken,
+                timestamp=time.time(),
+                seq=next_alert_seq(),
+                urgency="advisory",
+                kind="vision",
+                reasoning=(
+                    f"Seen: {result.get('description', '')}. "
+                    "Unconfirmed — the camera does not record values, it asks."
+                ),
+            ),
+        )
+
+    return result
+
+
 class HandoffRequest(BaseModel):
     case_id: str
 
@@ -307,22 +368,55 @@ async def _handle_finalized_segment(case: CaseState, segment: str, speaker_label
     asyncio.create_task(_run_agent_tier(case, segment))
 
 
+# One tier-2 run per case at a time, plus at most one queued trigger.
+#
+# Dispatching tier 2 with create_task kept it off the critical path, but it also
+# let several runs overlap — and the agent's only defence against repeating
+# itself is reading case.surfaced_issues, which is written *after* a run returns.
+# Overlapping runs therefore all read an empty list and each concluded it was
+# saying something new. Measured on the demo clip: "get a full vital set" was
+# announced three times under three different issue_keys, and one alert was
+# emitted twice verbatim, 0.2s apart. Serializing per case is what makes the
+# already-surfaced check work at all.
+#
+# The queue holds one trigger, not a backlog: if two utterances land while a run
+# is in flight, the older one would reason about a stale picture by the time it
+# got a turn, so the newer simply replaces it.
+_agent_inflight: set[str] = set()
+_agent_pending: dict[str, str] = {}
+
+
+async def _agent_tier_once(case: CaseState, segment: str) -> None:
+    decision = await run_agent_step(case, segment, lambda s: _emit_agent_step(case, s))
+    if (
+        decision.get("action_needed")
+        and decision.get("alert_text")
+        # Re-speaking a standing issue every utterance is how a room learns
+        # to tune the system out.
+        and not decision.get("already_surfaced")
+    ):
+        await _speak_alert(case, make_alert(decision))
+        store.save()
+
+
 async def _run_agent_tier(case: CaseState, segment: str) -> None:
     """Tier 2, off the critical path. It suppresses issues already raised, so
     tier 1's alert never gets echoed back in the agent's own words."""
+    if case.case_id in _agent_inflight:
+        _agent_pending[case.case_id] = segment
+        return
+
+    _agent_inflight.add(case.case_id)
     try:
-        decision = await run_agent_step(case, segment, lambda s: _emit_agent_step(case, s))
-        if (
-            decision.get("action_needed")
-            and decision.get("alert_text")
-            # Re-speaking a standing issue every utterance is how a room learns
-            # to tune the system out.
-            and not decision.get("already_surfaced")
-        ):
-            await _speak_alert(case, make_alert(decision))
-            store.save()
-    except Exception:
-        logger.exception("reasoning agent failed for case %s", case.case_id)
+        while segment:
+            try:
+                await _agent_tier_once(case, segment)
+            except Exception:
+                logger.exception("reasoning agent failed for case %s", case.case_id)
+            segment = _agent_pending.pop(case.case_id, "")
+    finally:
+        _agent_inflight.discard(case.case_id)
+        _agent_pending.pop(case.case_id, None)
 
 
 @app.websocket("/ws/case/{case_id}")
