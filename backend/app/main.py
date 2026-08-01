@@ -196,6 +196,21 @@ async def set_speaker_role(req: SpeakerRoleRequest):
     return {"speaker_roles": {str(k): v for k, v in case.speaker_roles.items()}}
 
 
+@app.get("/api/agent_log")
+async def agent_log(limit: int = 400):
+    """Every reasoning step so far, newest last, across all cases.
+
+    The Agent Log is the audit trail: it is where a reviewer sees which tool the
+    agent reached for, what came back, and why it decided to speak or stay quiet.
+    Live steps arrive over each case's WebSocket, but a page load has no history,
+    so a refresh mid-case used to blank the whole trail. The frontend calls this
+    on mount and dedupes against the live stream by step id.
+    """
+    steps = [step for case in store.all() for step in case.agent_steps]
+    steps.sort(key=lambda s: s.get("timestamp", 0))
+    return steps[-limit:]
+
+
 class ObserveRequest(BaseModel):
     case_id: str
     image_b64: str
