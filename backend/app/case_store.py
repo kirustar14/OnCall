@@ -54,6 +54,10 @@ class Alert:
     drug_class: str = ""
     # Where the allergy came from — "parent via nurse", "EMS handoff".
     source: str = ""
+    # FDA/NIH classification for the ordered drug, from RxNav. When an EPC came
+    # back, the class claim is checkable rather than asserted by the model.
+    fda_classes: list[str] = field(default_factory=list)
+    fda_verified: bool = False
 
 
 @dataclass
@@ -202,6 +206,8 @@ class CaseState:
                     "allergen": a.allergen,
                     "drug_class": a.drug_class,
                     "source": a.source,
+                    "fda_classes": a.fda_classes,
+                    "fda_verified": a.fda_verified,
                     "timestamp": a.timestamp,
                 }
                 for a in self.alerts

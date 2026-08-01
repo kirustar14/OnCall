@@ -97,7 +97,13 @@ async def build_handoff(case: CaseState) -> dict:
                 "effort": "medium",
                 "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA},
             },
-            system=SYSTEM_PROMPT,
+            system=[
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[
                 {"role": "user", "content": f"Case record:\n{json.dumps(context, indent=2)}"}
             ],

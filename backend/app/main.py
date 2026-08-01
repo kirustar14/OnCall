@@ -205,6 +205,8 @@ async def _handle_finalized_segment(case: CaseState, segment: str, speaker_label
                     "allergen": alert.allergen,
                     "drug_class": alert.drug_class,
                     "source": alert.source,
+                    "fda_classes": alert.fda_classes,
+                    "fda_verified": alert.fda_verified,
                     "timestamp": alert.timestamp,
                 },
                 "audio_b64": audio_b64,

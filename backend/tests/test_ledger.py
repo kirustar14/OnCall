@@ -28,7 +28,7 @@ from app.case_store import (
     WorkItem,
 )
 from app.deepgram_stt import _dominant_speaker
-from app.extraction import _normalize
+from app.extraction import _normalize, extract_from_segment
 from app.intervention import (
     CONFLICT_SCHEMA,
     CONFLICT_SYSTEM_PROMPT,
@@ -38,6 +38,7 @@ from app.intervention import (
     _spoken_alert,
 )
 from app.medplum_client import MedplumClient, _trigger_seconds
+from app.rxnav import epc_classes, normalize_drug_name
 from app.segmenter import MAX_CHARS, QUIET_SECONDS, UtteranceBuffer
 from app.watchdog import _find_orphan, _prompt_text
 
@@ -495,6 +496,61 @@ async def test_segmenter() -> None:
     check("segmenter: quiet gap flushes the utterance", len(got) == 1, f"got {got}")
 
 
+# --- 8d. FDA class verification + prompt caching ------------------------------
+
+
+def test_rxnav_and_caching() -> None:
+    """The class claim should be checkable, not asserted."""
+
+    cases = [
+        ("Ampicillin-sulbactam 3 g IV push", "ampicillin / sulbactam"),
+        ("vancomycin 1 gram IV over 60 minutes", "vancomycin"),
+        ("clindamycin 900 mg IV", "clindamycin"),
+        ("ceftriaxone 2g IV stat", "ceftriaxone"),
+        ("piperacillin-tazobactam 4.5 g IV q6h", "piperacillin / tazobactam"),
+    ]
+    for spoken, expected in cases:
+        got = normalize_drug_name(spoken)
+        check(f"rxnav: normalize {spoken!r}", got == expected, f"got {got!r}")
+
+    classes = [
+        "EPC: Penicillin-class Antibacterial",
+        "EPC: beta Lactamase Inhibitor",
+        "ATC1-4: Antibiotics",
+        "CHEM: Penicillins",
+    ]
+    epc = epc_classes(classes)
+    check("rxnav: epc_classes strips the prefix", epc[0] == "Penicillin-class Antibacterial", str(epc))
+    check("rxnav: epc_classes excludes non-EPC types", len(epc) == 2, str(epc))
+    check("rxnav: no EPC returned -> unverified", epc_classes(["ATC1-4: Antibiotics"]) == [])
+
+    check(
+        "alert: carries FDA classes",
+        "fda_classes" in {f.name for f in dc_fields(Alert)},
+    )
+    check(
+        "alert: carries a verified flag",
+        "fda_verified" in {f.name for f in dc_fields(Alert)},
+    )
+
+    # Caching is a prefix match — the stable prompt must be in `system`, and
+    # anything that varies must be in the user message, or nothing ever hits.
+    src = inspect.getsource(extract_from_segment)
+    check("caching: extraction marks the system prompt cacheable", "cache_control" in src)
+    check(
+        "caching: the varying ledger stays out of the cached prefix",
+        "ledger_text" in src and "messages=[" in src,
+    )
+    check(
+        "caching: conflict check marks its system prompt cacheable",
+        "cache_control" in inspect.getsource(_assess_conflict),
+    )
+    check(
+        "conflict: FDA classes are fetched before the model reasons",
+        "drug_classes" in inspect.getsource(_assess_conflict),
+    )
+
+
 # --- 9. snapshot schema drift ------------------------------------------------
 
 
@@ -540,6 +596,7 @@ def main() -> int:
     test_no_recommendations()
     test_conflict_prefilter()
     asyncio.run(test_segmenter())
+    test_rxnav_and_caching()
     test_snapshot_drift()
 
     for name in PASSED:

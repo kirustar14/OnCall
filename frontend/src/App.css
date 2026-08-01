@@ -769,3 +769,45 @@ body {
 .speaker-actions input::placeholder {
   color: #5b616c;
 }
+
+/* ---------- FDA class verification on an alert ---------- */
+
+.alert-text {
+  line-height: 1.5;
+}
+
+.alert-provenance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 11.5px;
+  font-weight: 400;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #e6b8b5;
+}
+
+.fda-stamp {
+  background: #0f3d33;
+  color: #35d0a5;
+  border: 1px solid #1c4a3e;
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.fda-stamp.unverified {
+  background: #3a2a08;
+  color: #f0a840;
+  border-color: #6b5117;
+}
+
+.fda-source {
+  color: #a08683;
+  margin-left: auto;
+}

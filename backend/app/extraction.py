@@ -231,7 +231,17 @@ async def extract_from_segment(
                 "effort": "low",
                 "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA},
             },
-            system=SYSTEM_PROMPT,
+            # This prompt is ~1500 tokens and byte-identical on every utterance,
+            # so it caches. Everything that varies — the open ledger, the speaker,
+            # the transcript — lives in the user message, after the breakpoint.
+            # Caching is a prefix match: one byte of drift here and nothing hits.
+            system=[
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[
                 {
                     "role": "user",

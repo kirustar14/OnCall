@@ -57,7 +57,22 @@ export default function CaseSession({ caseId, active }) {
         <div className="alert-stack">
           {alerts.map((a) => (
             <div className="alert-banner" key={a.id}>
-              ⚠️ {a.text}
+              <div className="alert-text">⚠️ {a.text}</div>
+              {a.fda_verified ? (
+                <div className="alert-provenance">
+                  <span className="fda-stamp">FDA VERIFIED</span>
+                  {(a.fda_classes || [])
+                    .filter((c) => c.startsWith('EPC:'))
+                    .map((c) => c.replace('EPC: ', ''))
+                    .join(' · ')}
+                  <span className="fda-source">NIH RxNav</span>
+                </div>
+              ) : (
+                <div className="alert-provenance">
+                  <span className="fda-stamp unverified">UNVERIFIED CLASS</span>
+                  no FDA classification returned — reasoning only
+                </div>
+              )}
             </div>
           ))}
         </div>

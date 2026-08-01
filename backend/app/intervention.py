@@ -23,6 +23,7 @@ import anthropic
 
 from app.case_store import Alert, CaseState
 from app.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+from app.rxnav import drug_classes, epc_classes
 
 logger = logging.getLogger("servare.intervention")
 
@@ -111,6 +112,12 @@ piperacillin-tazobactam and nafcillin are all penicillins even though the word "
 appears in none of their names. A keyword match would miss every one of them; that reasoning \
 is the entire job.
 
+You may be given the FDA's own drug classes for the ordered medication, retrieved from NIH \
+RxNav. When they are present, GROUND YOUR ANSWER IN THEM and name the Established \
+Pharmacologic Class (EPC) in your basis clause — an assertion you can point at beats one the \
+clinician has to take on trust. When no classes were returned, reason from pharmacology and \
+say plainly in the basis that the classification is unverified.
+
 You are NOT recommending treatment. Do not name an alternative drug, do not suggest what to \
 give instead, and do not tell the clinician what to do. State the class relationship as a fact \
 and stop. The clinician decides.
@@ -119,9 +126,20 @@ Set conflict=false where there is no genuine class relationship. Do not manufact
 
 
 async def _assess_conflict(allergen: str, medication: str) -> dict:
+    """Resolve the drug against FDA classification first, then reason."""
     if _client is None:
         logger.warning("ANTHROPIC_API_KEY not set — skipping conflict check")
-        return {"conflict": False, "drug_class": "", "basis": ""}
+        return {"conflict": False, "drug_class": "", "basis": "", "fda_classes": []}
+
+    # Authoritative classification BEFORE the model gets an opinion. A failed
+    # lookup must not block the check — it just means the answer is unverified.
+    fda_classes = await drug_classes(medication)
+    fda_block = (
+        "FDA drug classes for the ordered medication (NIH RxNav):\n  "
+        + "\n  ".join(fda_classes)
+        if fda_classes
+        else "FDA drug classes: none returned — classification is UNVERIFIED."
+    )
 
     def _call() -> dict:
         import json
@@ -134,13 +152,21 @@ async def _assess_conflict(allergen: str, medication: str) -> dict:
                 "effort": "medium",
                 "format": {"type": "json_schema", "schema": CONFLICT_SCHEMA},
             },
-            system=CONFLICT_SYSTEM_PROMPT,
+            # Stable prefix — cached across every conflict check.
+            system=[
+                {
+                    "type": "text",
+                    "text": CONFLICT_SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[
                 {
                     "role": "user",
                     "content": (
                         f"Documented allergy: {allergen}\n"
                         f"Medication just ordered: {medication}\n"
+                        f"{fda_block}\n\n"
                         "Does the ordered medication belong to the class this patient is "
                         "documented allergic to?"
                     ),
@@ -151,10 +177,12 @@ async def _assess_conflict(allergen: str, medication: str) -> dict:
         return json.loads(text)
 
     try:
-        return await asyncio.to_thread(_call)
+        verdict = await asyncio.to_thread(_call)
+        verdict["fda_classes"] = fda_classes
+        return verdict
     except Exception:
         logger.exception("conflict assessment failed")
-        return {"conflict": False, "drug_class": "", "basis": ""}
+        return {"conflict": False, "drug_class": "", "basis": "", "fda_classes": fda_classes}
 
 
 def _time_ago(timestamp: float) -> str:
@@ -224,6 +252,7 @@ async def check_for_conflicts(case: CaseState) -> list[Alert]:
         if not assessment.get("conflict"):
             continue
 
+        fda = assessment.get("fda_classes") or []
         alert = Alert(
             id=str(uuid.uuid4()),
             text=_spoken_alert(case, allergy, med, assessment),
@@ -231,6 +260,9 @@ async def check_for_conflicts(case: CaseState) -> list[Alert]:
             drug_class=assessment.get("drug_class", ""),
             source=(allergy.get("source") or "").strip(),
             timestamp=time.time(),
+            fda_classes=fda,
+            # The difference between "the model says so" and "the FDA says so".
+            fda_verified=bool(epc_classes(fda)),
         )
         case.alerts.append(alert)
         new_alerts.append(alert)
