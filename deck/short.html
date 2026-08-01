@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OnCall — the record the room can't keep</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,200..700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#100f0d; --ink:#f2efe6; --ink-2:rgba(242,239,230,.62); --ink-3:rgba(242,239,230,.52);
+  --hair:rgba(242,239,230,.10); --hair-2:rgba(242,239,230,.20);
+  --accent:#e05a4f; --accent-deep:#b3261e;
+  --live:#4cb96b;
+  --p-bg:#faf9f6; --p-card:#ffffff; --p-recessed:#f5f4ef;
+  --p-border:#e4e1d8; --p-border-strong:#1a1a18;
+  --p-text:#1a1a18; --p-muted:#8c8878; --p-label:#9b9686;
+  --p-alert:#b3261e; --p-radius:14px;
+  --e-emph:cubic-bezier(.2,0,0,1);
+  --e-emph-dec:cubic-bezier(.05,.7,.1,1);
+  --e-std-dec:cubic-bezier(0,0,0,1);
+  --e-std-acc:cubic-bezier(.3,0,1,1);
+  --spring-def:cubic-bezier(.38,1.21,.22,1.00);
+  --sans:"Newsreader",Georgia,"Iowan Old Style",Palatino,serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --sh-1:0 1px 2px rgba(0,0,0,.30);
+  --sh-2:0 6px 22px rgba(0,0,0,.34);
+  --sh-3:0 26px 70px rgba(0,0,0,.46);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#000;overflow:hidden;
+  font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+#viewport{position:fixed;inset:0;background:#000;overflow:hidden}
+#deck{width:1920px;height:1080px;position:absolute;left:50%;top:50%;
+  transform-origin:center center;background:var(--bg);overflow:hidden}
+#aura{position:absolute;inset:-20%;z-index:0;pointer-events:none}
+#aura b{position:absolute;display:block;border-radius:50%;filter:blur(170px);will-change:transform}
+#aura b:nth-child(1){width:1000px;height:1000px;left:-8%;top:-16%;background:#3a2a24;opacity:.55;animation:d1 38s ease-in-out infinite}
+#aura b:nth-child(2){width:820px;height:820px;right:-6%;bottom:-18%;background:#2a2a22;opacity:.5;animation:d2 45s ease-in-out infinite}
+@keyframes d1{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(80px,50px,0) scale(1.1)}}
+@keyframes d2{0%,100%{transform:translate3d(0,0,0) scale(1.04)}50%{transform:translate3d(-60px,-70px,0) scale(.95)}}
+#trace{position:absolute;left:0;right:0;top:52%;z-index:0;pointer-events:none;opacity:.05}
+#grain{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:.035;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
+.s{position:absolute;inset:0;z-index:2;padding:76px 110px;display:flex;flex-direction:column;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity 200ms var(--e-std-acc),visibility 0s 200ms}
+.s.on{opacity:1;visibility:visible;pointer-events:auto;
+  transition:opacity 300ms 120ms var(--e-std-dec),visibility 0s}
+.s.center{justify-content:center;align-items:center;text-align:center}
+.s.mid{justify-content:flex-start}
+.t-mega{font-size:158px;line-height:.92;letter-spacing:-.045em;font-weight:300;margin:0}
+.t-big{font-size:104px;line-height:1.04;letter-spacing:-.036em;font-weight:300;margin:0}
+.t-mid{font-size:64px;line-height:1.1;letter-spacing:-.028em;font-weight:350;margin:0}
+.t-sm{font-size:34px;line-height:1.4;letter-spacing:-.012em;font-weight:400;margin:0;color:var(--ink-2)}
+.lbl{font-family:var(--mono);font-size:17px;letter-spacing:.26em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:500;margin:0}
+strong{font-weight:600}
+em{font-style:italic;color:var(--ink)}
+.hot{color:var(--accent)}
+.shead{margin-bottom:30px;flex-shrink:0}
+.shead .lbl{margin-bottom:14px}
+.shead h2{font-size:56px;line-height:1.06;letter-spacing:-.032em;font-weight:300;margin:0;max-width:30ch}
+.shead .ctx{font-size:24px;line-height:1.45;color:var(--ink-3);margin:12px 0 0;max-width:52ch}
+.canvas{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;position:relative}
+.canvas svg{width:100%;height:100%;overflow:visible}
+[data-b]{opacity:0;transform:translateY(26px);
+  transition:opacity 400ms var(--e-std-dec),transform 500ms var(--e-emph-dec)}
+[data-b].in{opacity:1;transform:none}
+[data-b][data-fx="fade"]{transform:none}
+[data-b][data-fx="scale"]{transform:scale(.92);
+  transition:opacity 300ms var(--e-std-dec),transform 500ms var(--spring-def)}
+[data-b][data-fx="scale"].in{transform:scale(1)}
+.box{fill:rgba(242,239,230,.035);stroke:var(--hair-2);stroke-width:1.5}
+.box-strong{fill:rgba(242,239,230,.06);stroke:var(--ink);stroke-width:2}
+.box-hot{fill:rgba(224,90,79,.09);stroke:var(--accent);stroke-width:2}
+.box-ghost{fill:none;stroke:var(--hair-2);stroke-width:1.5;stroke-dasharray:7 7}
+.edge{stroke:var(--ink-2);stroke-width:2;fill:none}
+.edge-soft{stroke:var(--ink-3);stroke-width:1.6;fill:none}
+.edge-hot{stroke:var(--accent);stroke-width:2.6;fill:none}
+.dash{stroke-dasharray:6 7}
+.flow{stroke-dasharray:7 10;animation:flow 1.25s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-34}}
+.dH{font-family:var(--sans);font-size:30px;font-weight:350;fill:var(--ink)}
+.dHs{font-family:var(--sans);font-size:25px;font-weight:350;fill:var(--ink)}
+.dM{font-family:var(--mono);font-size:19px;fill:var(--ink-2)}
+.dMi{font-family:var(--mono);font-size:20px;fill:var(--ink)}
+.dMh{font-family:var(--mono);font-size:20px;fill:var(--accent)}
+.dL{font-family:var(--mono);font-size:16px;letter-spacing:.2em;fill:var(--ink-3)}
+.dBig{font-family:var(--sans);font-size:42px;font-weight:300;fill:var(--ink)}
+.d-hot{fill:var(--accent)}
+.d-ink{fill:var(--ink)}
+.d-live{fill:var(--live)}
+.d-soft{fill:var(--ink-3)}
+.breathe{animation:breathe 2.4s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.28}}
+.app{background:var(--p-bg);border-radius:20px;box-shadow:var(--sh-3);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  color:var(--p-text);padding:26px 30px;width:100%}
+.app-bar{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.app-bar .q{font-family:var(--mono);font-size:19px;color:#4a5c8c;
+  background:var(--p-recessed);border:1px solid var(--p-border);border-radius:10px;padding:9px 14px}
+.app-bar .n{font-family:var(--mono);font-size:16px;color:var(--p-label);letter-spacing:.14em;margin-left:auto}
+.trow{display:flex;align-items:center;gap:16px;background:var(--p-card);
+  border:1px solid var(--p-border);border-radius:var(--p-radius);padding:16px 20px;margin-bottom:10px;
+  box-shadow:var(--sh-1)}
+.trow.no-owner{border-color:var(--p-alert);border-width:2px;background:#fff}
+.trow .task{font-size:23px}
+.trow .own{margin-left:auto;font-family:var(--mono);font-size:17px;color:var(--p-muted)}
+.trow.no-owner .own{color:var(--p-alert);font-weight:600;letter-spacing:.1em}
+.trow .st{font-family:var(--mono);font-size:15px;color:var(--p-label);
+  border:1px solid var(--p-border);border-radius:999px;padding:4px 11px;letter-spacing:.08em}
+.trow.no-owner .st{color:var(--p-alert);border-color:var(--p-alert)}
+#chrome{position:absolute;left:0;right:0;bottom:0;z-index:40;pointer-events:none;
+  padding:0 110px 40px;display:flex;align-items:flex-end;gap:24px}
+#dots{display:flex;gap:7px;pointer-events:auto}
+#dots i{width:7px;height:7px;border-radius:50%;background:rgba(242,239,230,.16);display:block;
+  cursor:pointer;transition:all 280ms var(--e-emph)}
+#dots i.on{background:var(--accent);width:26px;border-radius:4px}
+#dots i.seen{background:rgba(242,239,230,.34)}
+#meta{margin-left:auto;font-family:var(--mono);font-size:14px;letter-spacing:.2em;
+  color:var(--ink-3);text-transform:uppercase}
+#bar{position:absolute;left:0;top:0;height:2px;z-index:41;background:var(--accent);
+  transition:width 420ms var(--e-emph)}
+#hint{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:60;
+  font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(255,255,255,.30);transition:opacity 500ms;pointer-events:none}
+#hint.gone{opacity:0}
+#notes{position:fixed;left:0;right:0;bottom:0;z-index:90;background:rgba(12,11,9,.97);
+  backdrop-filter:blur(20px);border-top:1px solid var(--hair-2);padding:26px 44px 30px;
+  transform:translateY(100%);transition:transform 380ms var(--e-emph);max-height:46vh;overflow-y:auto}
+#notes.on{transform:none}
+#notes h4{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 12px;font-weight:500}
+#notes p{margin:0 0 12px;font-size:16px;line-height:1.62;color:var(--ink-2);max-width:110ch;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+#notes strong{color:var(--ink)}
+#notes .beat{color:var(--accent);font-weight:600}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important}
+}
+</style>
+</head>
+<body>
+<div id="viewport"><div id="deck">
+  <div id="aura"><b></b><b></b></div>
+  <svg id="trace" viewBox="0 0 1920 200" preserveAspectRatio="none" height="200" aria-hidden="true">
+    <path id="tracePath" fill="none" stroke="var(--accent)" stroke-width="2"
+          d="M0 100 H420 l18 -8 l16 46 l20 -96 l22 118 l18 -60 H900 l20 -14 l14 40 l18 -86 l20 108 l16 -48 H1400 l18 -8 l16 46 l20 -96 l22 118 l18 -60 H1920"/>
+  </svg>
+  <div id="grain"></div>
+  <div id="bar"></div>
+
+  <!-- ══════════ 01 · title (shown right after the live demo) ══════════ -->
+  <section class="s center">
+    <div data-b data-fx="fade" style="margin-bottom:44px">
+      <svg width="300" height="76" viewBox="0 0 300 76" aria-hidden="true">
+        <path d="M0 38 H88 l14 -7 l12 36 l16 -74 l17 90 l14 -45 H300" fill="none"
+              stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"
+              stroke-dasharray="440" stroke-dashoffset="440">
+          <animate attributeName="stroke-dashoffset" from="440" to="0" dur="2.2s"
+                   begin="0.4s" fill="freeze" calcMode="spline" keySplines=".2 0 0 1"/>
+        </path>
+      </svg>
+    </div>
+    <h1 class="t-mega" data-b>OnCall</h1>
+    <p class="t-sm" data-b style="margin-top:38px;max-width:36ch">
+      Listens to the room.<br>Keeps the record. Speaks once.</p>
+    <p class="lbl" data-b data-fx="fade" style="margin-top:64px">
+      Deepgram &nbsp;·&nbsp; Medplum &nbsp;·&nbsp; moss.dev &nbsp;·&nbsp; Claude Opus 5 &nbsp;·&nbsp; NIH RxNav</p>
+  </section>
+
+  <!-- ══════════ 02 · the problem — timeline artifact ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">A trauma bay, 57 seconds</p>
+      <h2>Everything is said. Nothing is written.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 640" role="img"
+           aria-label="Five spoken moments on a time axis above an empty record">
+        <text class="dL" x="0" y="26">WHAT THE ROOM SAID</text>
+        <path class="edge-soft" d="M 0 230 H 1690" data-b data-fx="fade"/>
+        <g data-b>
+          <line class="edge-soft" x1="10" y1="230" x2="10" y2="176"/>
+          <circle class="d-ink" cx="10" cy="230" r="7"/>
+          <text class="dMi" x="0" y="160">GCS 13 · HR 122 · open tibia</text>
+          <text class="dL" x="0" y="128">0:00 HANDOFF</text>
+        </g>
+        <g data-b>
+          <line class="edge-soft" x1="840" y1="230" x2="840" y2="286"/>
+          <circle class="d-ink" cx="840" cy="230" r="7"/>
+          <text class="dMi" x="840" y="314" text-anchor="middle">3 requests · 1 with nobody named</text>
+          <text class="dL" x="840" y="344" text-anchor="middle">0:28</text>
+        </g>
+        <g data-b>
+          <line class="edge-soft" x1="1018" y1="230" x2="1018" y2="186"/>
+          <circle class="d-ink" cx="1018" cy="230" r="7"/>
+          <text class="dM" x="1018" y="168" text-anchor="middle">“I’ve got ortho”</text>
+        </g>
+        <g data-b>
+          <line class="edge-hot" x1="1116" y1="230" x2="1116" y2="392"/>
+          <circle class="d-hot" cx="1116" cy="230" r="9"/>
+          <text class="dMh" x="1116" y="422" text-anchor="middle">severe penicillin allergy</text>
+          <text class="dL" x="1116" y="452" text-anchor="middle">0:38 · FROM THE MOTHER</text>
+        </g>
+        <g data-b>
+          <line class="edge-hot" x1="1434" y1="230" x2="1434" y2="176"/>
+          <circle class="d-hot" cx="1434" cy="230" r="9"/>
+          <text class="dMh" x="1434" y="160" text-anchor="middle">order: ampicillin-sulbactam</text>
+          <text class="dL" x="1434" y="128" text-anchor="middle">0:50</text>
+        </g>
+        <g data-b data-fx="fade">
+          <path class="edge-hot dash" d="M 1116 262 V 282 H 1434 V 262"/>
+          <rect x="1204" y="258" width="142" height="34" rx="17" fill="var(--bg)"/>
+          <text class="dMh" x="1275" y="284" text-anchor="middle">12 seconds</text>
+        </g>
+        <g data-b data-fx="fade">
+          <text class="dL" x="0" y="558">WHAT THE RECORD HELD</text>
+          <rect class="box-ghost" x="330" y="530" width="1360" height="60" rx="14"/>
+          <text class="dM" x="1010" y="568" text-anchor="middle">empty</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ══════════ 03 · three pillars (features) ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">What it does</p>
+      <h2>One stream in. Three things out.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 620" role="img"
+           aria-label="Room audio fans out into details, tasks and context, each landing as FHIR resources">
+        <g data-b data-fx="fade">
+          <rect class="box-strong" x="0" y="248" width="250" height="118" rx="18"/>
+          <g id="wave2"></g>
+          <text class="dHs" x="125" y="344" text-anchor="middle">the room</text>
+        </g>
+        <path class="edge" d="M 250 307 H 330" data-b data-fx="fade"/>
+        <path class="edge" d="M 330 96 V 518" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 330 96 H 552" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 330 307 H 552" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 330 518 H 552" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <g data-b>
+          <rect class="box" x="566" y="46" width="330" height="100" rx="16"/>
+          <text class="dH" x="596" y="92">Details</text>
+          <text class="dM" x="596" y="124">every fact said out loud</text>
+          <path class="edge-soft" d="M 896 96 H 976" marker-end="url(#ahs)"/>
+          <rect class="box" x="990" y="46" width="700" height="100" rx="16"/>
+          <text class="dMi" x="1020" y="88">Observation · AllergyIntolerance</text>
+          <text class="dMi" x="1020" y="120">MedicationRequest</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="566" y="257" width="330" height="100" rx="16"/>
+          <text class="dH" x="596" y="303">Tasks</text>
+          <text class="dM" x="596" y="335">every request said out loud</text>
+          <path class="edge-soft" d="M 896 307 H 976" marker-end="url(#ahs)"/>
+          <rect class="box" x="990" y="257" width="700" height="100" rx="16"/>
+          <text class="dMi" x="1020" y="299">Task · Task.owner · Provenance</text>
+          <text class="dM" x="1020" y="331">nobody named → owner omitted, never guessed</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="566" y="468" width="330" height="100" rx="16"/>
+          <text class="dH" x="596" y="514">Context</text>
+          <text class="dM" x="596" y="546">for whoever walks in cold</text>
+          <path class="edge-soft" d="M 896 518 H 976" marker-end="url(#ahs)"/>
+          <rect class="box" x="990" y="468" width="700" height="100" rx="16"/>
+          <text class="dMi" x="1020" y="510">spoken handoff · ~20 seconds</text>
+          <text class="dM" x="1020" y="542">five panels, not a transcript</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ══════════ 04 · the boundary ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">The line it does not cross</p>
+      <h2>It states. It never prescribes.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 580" role="img"
+           aria-label="A fact passes the boundary as a statement; a therapy recommendation is blocked by it">
+        <g data-b data-fx="fade">
+          <rect class="box-strong" x="0" y="212" width="290" height="118" rx="18"/>
+          <text class="dHs" x="32" y="262">a fact the room</text>
+          <text class="dHs" x="32" y="298">already established</text>
+        </g>
+        <g data-b data-fx="fade">
+          <line x1="770" y1="10" x2="770" y2="560" stroke="var(--ink)" stroke-width="3"/>
+          <text class="dL" x="792" y="28">THE BOUNDARY</text>
+        </g>
+        <path class="edge flow" d="M 290 271 C 450 271, 450 122, 960 122" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <g data-b>
+          <circle class="d-live" cx="770" cy="122" r="10"/>
+          <rect class="box" x="980" y="62" width="710" height="122" rx="16"/>
+          <text class="dMi" x="1012" y="110">“Ampicillin-sulbactam is a</text>
+          <text class="dMi" x="1012" y="142">penicillin-class antibacterial.”</text>
+          <text class="dL" x="980" y="216">STATES IT · NAMES THE SOURCE · STOPS</text>
+        </g>
+        <path class="edge-hot dash" d="M 290 271 C 450 271, 450 428, 740 428" data-b data-fx="fade"/>
+        <g data-b><g transform="translate(770,428)">
+          <circle r="26" fill="var(--bg)" stroke="var(--accent)" stroke-width="3"/>
+          <path d="M -10 -10 L 10 10 M 10 -10 L -10 10" stroke="var(--accent)" stroke-width="3.4"/>
+        </g></g>
+        <g data-b data-fx="fade">
+          <rect class="box-ghost" x="980" y="378" width="710" height="100" rx="16"/>
+          <text class="dM" x="1012" y="424">“Give vancomycin instead.”</text>
+          <text class="dM" x="1012" y="456">a dose · an alternative · a plan</text>
+          <text class="dL" x="980" y="514">NEVER CROSSES</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ══════════ 05 · architecture / tech stack ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">Architecture</p>
+      <h2>One loop, room to room.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 640" role="img"
+           aria-label="A closed loop around the room: Deepgram in, Claude, Medplum, the RxNav gate, Deepgram out">
+        <g data-b data-fx="scale">
+          <rect class="box-strong" x="640" y="268" width="420" height="112" rx="56"/>
+          <circle class="d-live breathe" cx="702" cy="324" r="9"/>
+          <text class="dBig" x="740" y="338">the room</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="70" y="40" width="470" height="126" rx="16"/>
+          <text class="dH" x="102" y="88">Deepgram</text>
+          <text class="dM" x="102" y="122">nova-3-medical · diarize · keyterms</text>
+          <text class="dM" x="102" y="148">UtteranceEnd endpointing</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="1160" y="40" width="470" height="126" rx="16"/>
+          <text class="dH" x="1192" y="88">Claude Opus 5</text>
+          <text class="dM" x="1192" y="122">stateful structured extraction</text>
+          <text class="dM" x="1192" y="148">agentic reasoning + web_search</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="1160" y="474" width="470" height="126" rx="16"/>
+          <text class="dH" x="1192" y="522">Medplum</text>
+          <text class="dM" x="1192" y="556">Task · Provenance · Observation</text>
+          <text class="dM" x="1192" y="582">AllergyIntolerance · MedicationRequest</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="70" y="474" width="470" height="126" rx="16"/>
+          <text class="dH" x="102" y="522">Deepgram Aura-2</text>
+          <text class="dM" x="102" y="556">queued by urgency, not arrival</text>
+          <text class="dM" x="102" y="582">critical jumps the advisory</text>
+        </g>
+        <g data-b data-fx="scale">
+          <rect class="box-hot" x="670" y="508" width="360" height="68" rx="16"/>
+          <text class="dMh" x="702" y="550">NIH RxNav · moss.dev · the gate</text>
+        </g>
+        <g data-b data-fx="fade">
+          <path class="edge flow" d="M 668 268 C 580 210, 540 130, 528 106" marker-end="url(#ah)"/>
+          <path class="edge flow" d="M 540 103 H 1148" marker-end="url(#ah)"/>
+          <path class="edge flow" d="M 1395 166 V 462" marker-end="url(#ah)"/>
+          <path class="edge-hot flow" d="M 1160 542 H 1042" marker-end="url(#ahc)"/>
+          <path class="edge-hot flow" d="M 670 542 H 552" marker-end="url(#ahc)"/>
+          <path class="edge flow" d="M 305 474 C 305 400, 480 356, 628 336" marker-end="url(#ah)"/>
+          <text class="dL" x="560" y="88">SPEECH</text>
+          <text class="dL" x="1414" y="330">STRUCTURE</text>
+          <text class="dL" x="1064" y="518">VERIFY + RECALL</text>
+          <text class="dL" x="330" y="408">SPEAK</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ══════════ 06 · the FHIR resource graph (data model) ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">Grounded in Medplum</p>
+      <h2>Every fact lands on a resource FHIR already defines.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 640" role="img"
+           aria-label="The FHIR resource graph: Patient and Encounter above, Observation, AllergyIntolerance, MedicationRequest and Task below, each carrying a Provenance">
+        <g data-b data-fx="fade">
+          <rect class="box" x="520" y="0" width="250" height="88" rx="16"/>
+          <text class="dH" x="552" y="54">Patient</text>
+          <rect class="box" x="880" y="0" width="300" height="88" rx="16"/>
+          <text class="dH" x="912" y="44">Encounter</text>
+          <text class="dM" x="912" y="72">the case</text>
+          <path class="edge" d="M 880 44 H 782" marker-end="url(#ah)"/>
+          <text class="dL" x="831" y="20" text-anchor="middle">SUBJECT</text>
+        </g>
+        <g data-b data-fx="fade">
+          <text class="dL" x="0" y="146">REFERENCES</text>
+          <path class="edge" d="M 197 200 V 140 H 1487 V 200"/>
+          <path class="edge" d="M 622 200 V 140"/>
+          <path class="edge" d="M 1047 200 V 140"/>
+          <path class="edge" d="M 1030 140 V 88" marker-end="url(#ah)"/>
+        </g>
+        <g data-b>
+          <rect class="box" x="0" y="200" width="395" height="140" rx="16"/>
+          <text class="dH" x="32" y="250">Observation</text>
+          <text class="dM" x="32" y="288">HR 122 · BP 104/68</text>
+          <text class="dM" x="32" y="316">GCS 13</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="425" y="200" width="395" height="140" rx="16"/>
+          <text class="dH" x="457" y="250">AllergyIntolerance</text>
+          <text class="dM" x="457" y="288">penicillin — stored bare, source tagged</text>
+          <text class="dM" x="457" y="316">anaphylaxis · high</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="850" y="200" width="395" height="140" rx="16"/>
+          <text class="dH" x="882" y="250">MedicationRequest</text>
+          <text class="dM" x="882" y="288">ampicillin-sulbactam</text>
+          <text class="dM" x="882" y="316">3 g IV</text>
+        </g>
+        <g data-b>
+          <rect class="box-hot" x="1275" y="200" width="425" height="140" rx="16"/>
+          <text class="dH" x="1307" y="250">Task</text>
+          <text class="dMh" x="1307" y="288">owner → Practitioner</text>
+          <text class="dM" x="1307" y="316">left off entirely when unowned</text>
+        </g>
+        <g data-b data-fx="fade">
+          <text class="dL" x="0" y="436">CARRIES</text>
+          <path class="edge" d="M 197 340 V 430 H 1487 V 340"/>
+          <path class="edge" d="M 622 340 V 430"/>
+          <path class="edge" d="M 1047 340 V 430"/>
+          <path class="edge" d="M 850 430 V 492" marker-end="url(#ah)"/>
+        </g>
+        <g data-b data-fx="scale">
+          <rect class="box-strong" x="500" y="500" width="700" height="140" rx="16"/>
+          <text class="dH" x="532" y="550">Provenance</text>
+          <text class="dM" x="532" y="588">agent.who → the agent Device</text>
+          <text class="dMh" x="532" y="618">agent.onBehalfOf → the human source</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ══════════ 07 · unowned work + moss.dev — recreated product UI ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">The hard part</p>
+      <h2>Unowned work is a search. Patient memory is semantic.</h2>
+    </div>
+    <div class="canvas">
+      <div style="width:100%;max-width:1500px" data-b data-fx="scale">
+        <div class="app">
+          <div class="app-bar">
+            <span class="q">GET /Task?owner:missing=true&amp;status=ready</span>
+            <span class="n">MEDPLUM · FHIR R4</span>
+          </div>
+          <div class="trow">
+            <span class="task">Get ortho down here</span>
+            <span class="st">IN-PROGRESS</span>
+            <span class="own">owner · Nurse Okafor</span>
+          </div>
+          <div class="trow">
+            <span class="task">Repeat that pressure in five minutes</span>
+            <span class="st">READY</span>
+            <span class="own">owner · Nurse Okafor</span>
+          </div>
+          <div class="trow no-owner">
+            <span class="task">Determine anticoagulation status</span>
+            <span class="st">READY</span>
+            <span class="own">NO OWNER</span>
+          </div>
+          <div class="app-bar" style="margin:22px 0 0">
+            <span class="q" style="border-style:dashed">moss.dev &nbsp;“anything about her mother?”</span>
+            <span class="n">SEMANTIC RECALL · ACROSS EVERY CASE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 08 · close ══════════ -->
+  <section class="s center">
+    <h2 class="t-big" data-b style="max-width:18ch">It asks.<br>
+      <span style="color:var(--ink-2)">It never assigns.</span><br>
+      <span style="color:var(--ink-2)">And it never advises.</span></h2>
+  </section>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--ink-2)"/></marker>
+    <marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--ink-3)"/></marker>
+    <marker id="ahc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--accent)"/></marker>
+  </defs></svg>
+
+  <div id="chrome"><div id="dots"></div><div id="meta"></div></div>
+</div></div>
+
+<div id="notes"><h4>Speaker notes</h4><div id="notesBody"></div></div>
+<div id="hint">← → &nbsp;·&nbsp; N notes &nbsp;·&nbsp; S speaker view &nbsp;·&nbsp; F fullscreen</div>
+
+<script>
+/* ══════════ SPEAKER NOTES (8 slides) ══════════ */
+const NOTES = [
+`<p><span class="beat">Right after the live demo, no pause.</span> "That's OnCall catching in real time what the room almost missed. Let us show you how it's built."</p>
+<p>Don't list the sponsors out loud yet — they're on the slide, come back to them at the end.</p>`,
+
+`<p>Walk the axis left to right. Handoff, requests, someone claims one.</p>
+<p><span class="beat">Slow down at the two red marks.</span> The mother relays a penicillin allergy at 38 seconds. The order goes in at 50.</p>
+<p><span class="beat">Point at the empty box.</span> <strong>Both facts were in the room. Neither was anywhere a person could check.</strong> The patient is confused and can't give her own history — the room is the only record that exists.</p>`,
+
+`<p>Three things, and deliberately nothing else.</p>
+<p><span class="beat">Point at the middle row.</span> When nobody is named, we leave the owner off rather than guessing it from whoever happened to be speaking. <strong>A wrong owner is worse than no owner.</strong></p>
+<p>Voice in, voice out. Nobody stops to type. This is the "enhancing clinicians, not adding workload" piece.</p>`,
+
+`<p>This is the slide that gets asked about, so land it deliberately.</p>
+<p><span class="beat">Trace the top path.</span> It states the fact and names the source. <span class="beat">Then the blocked one.</span> <strong>It never recommends a therapy.</strong></p>
+<p>Worth saying out loud even without a slide for it: the match underneath isn't string matching — "ampicillin-sulbactam" shares no substring with "penicillin." We resolve it to its FDA-established drug class via RxNav, which is why it correctly fires anyway, and correctly stays silent on something like clindamycin, which resolves to a different class entirely.</p>`,
+
+`<p>This is the tech-stack slide — say each name out loud as you point.</p>
+<p><span class="beat">Point at the gate.</span> Nothing reaches the speaker without passing RxNav and a semantic recall through moss.dev first.</p>
+<p>One loop: Deepgram in, Claude reasoning agentically with web_search, Medplum as the FHIR source of truth, Deepgram Aura-2 back out — queued by urgency, not by arrival order.</p>`,
+
+`<p>Every fact lands as real FHIR, not a JSON blob — <strong>we didn't invent a schema, we used the one that already exists.</strong></p>
+<p><span class="beat">Point at the bottom row.</span> Every resource carries a Provenance — who said it, and on whose behalf — so a clinician can review the basis instead of trusting us blindly.</p>
+<p><span class="beat">Point at Task, top right.</span> No owner named → left off entirely, never guessed.</p>`,
+
+`<p>This is the payoff for modelling it properly.</p>
+<p><span class="beat">Read the query out loud.</span> owner:missing=true is a standard FHIR search modifier — we didn't build a custom "unowned" flag.</p>
+<p><span class="beat">Then the bottom bar.</span> moss.dev is what lets us ask something fuzzy — "anything about her mother?" — and get an answer pulled from across every case for this patient, not just the current one, in milliseconds.</p>`,
+
+`<p><span class="beat">Read it, then stop talking.</span> Leave it up for questions.</p>
+<p>If you only get one line in: <strong>it asks, it never assigns, and it never advises.</strong> The best doctor is the one who's always listening — that's what we built.</p>`
+];
+
+/* ══════════ nav ══════════ */
+const slides=[...document.querySelectorAll('.s')];
+const dots=document.getElementById('dots'),bar=document.getElementById('bar'),
+      meta=document.getElementById('meta'),notesEl=document.getElementById('notes'),
+      notesBody=document.getElementById('notesBody'),hint=document.getElementById('hint');
+let cur=-1;
+dots.innerHTML=slides.map((_,i)=>`<i data-i="${i}"></i>`).join('');
+const dotEls=[...dots.children];
+const buildsOf=i=>slides[i]?[...slides[i].querySelectorAll('[data-b]')]:[];
+
+function goto(i){
+  if(i<0||i>=slides.length||i===cur)return;
+  buildsOf(cur).forEach(e=>{e.classList.remove('in');e.style.transitionDelay=''});
+  cur=i;
+  slides.forEach((s,k)=>s.classList.toggle('on',k===cur));
+  dotEls.forEach((d,k)=>{d.classList.toggle('on',k===cur);d.classList.toggle('seen',k<cur)});
+  bar.style.width=((cur+1)/slides.length*100)+'%';
+  meta.textContent=String(cur+1).padStart(2,'0')+' / '+slides.length;
+  notesBody.innerHTML=NOTES[cur]||'';
+  buildsOf(cur).forEach((el,k)=>{
+    el.style.transitionDelay=(240+k*90)+'ms';
+    requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('in')));
+  });
+  try{chan&&chan.postMessage({i:cur})}catch(e){}
+}
+addEventListener('keydown',e=>{
+  if(['ArrowRight',' ','PageDown','Enter'].includes(e.key)){e.preventDefault();goto(cur+1)}
+  else if(['ArrowLeft','PageUp','Backspace'].includes(e.key)){e.preventDefault();goto(cur-1)}
+  else if(e.key==='Home')goto(0);
+  else if(e.key==='End')goto(slides.length-1);
+  else if(e.key==='n'||e.key==='N')notesEl.classList.toggle('on');
+  else if(e.key==='s'||e.key==='S')openSpeaker();
+  else if(e.key==='f'||e.key==='F')document.documentElement.requestFullscreen?.();
+  hint.classList.add('gone');
+});
+dots.addEventListener('click',e=>{const d=e.target.closest('i');if(d)goto(+d.dataset.i)});
+document.getElementById('viewport').addEventListener('click',e=>{
+  if(e.target.closest('#dots,#notes,#hint,button,[data-beat]'))return;
+  const r=e.currentTarget.getBoundingClientRect();
+  goto((e.clientX-r.left)/r.width<0.28?cur-1:cur+1);
+  hint.classList.add('gone');
+});
+setTimeout(()=>hint.classList.add('gone'),7000);
+
+function fit(){const s=Math.min(innerWidth/1920,innerHeight/1080);
+  document.getElementById('deck').style.transform=`translate(-50%,-50%) scale(${s})`}
+addEventListener('resize',fit);fit();
+
+/* ══════════ speaker window ══════════ */
+let chan=null; try{chan=new BroadcastChannel('deck')}catch(e){}
+function openSpeaker(){
+  const w=window.open('','speaker','width=860,height=720');
+  if(!w)return;
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>Speaker view</title><style>
+    body{margin:0;background:#0d0c0a;color:#f2efe6;padding:26px 30px;
+      font:16px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    h1{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:#8c8878;margin:0 0 6px}
+    #t{font-variant-numeric:tabular-nums;font-size:38px;font-weight:300;letter-spacing:-.03em;margin:0 0 4px}
+    #c{color:#8c8878;font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 24px}
+    #b p{margin:0 0 14px;color:#cbc7bb}#b strong{color:#fff}.beat{color:#e05a4f;font-weight:600}
+    hr{border:0;border-top:1px solid #2b2924;margin:22px 0}#n{color:#7d7869;font-size:14px}#n b{color:#a8a394}
+  </style><h1>Speaker view</h1><div id="t">00:00</div><div id="c">—</div><div id="b"></div><hr><div id="n"></div>`);
+  w.document.close();
+  const t0=Date.now();
+  setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000),el=w.document.getElementById('t');
+    if(el)el.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')},500);
+  const paint=i=>{
+    if(w.closed)return;
+    w.document.getElementById('c').textContent='Slide '+(i+1)+' of '+slides.length;
+    w.document.getElementById('b').innerHTML=NOTES[i]||'';
+    w.document.getElementById('n').innerHTML=NOTES[i+1]
+      ? '<b>Next →</b> '+NOTES[i+1].replace(/<[^>]+>/g,' ').trim().slice(0,150)+'…'
+      : '<b>End.</b> Leave the last slide up for Q&amp;A.';
+  };
+  paint(cur);
+  if(chan)chan.onmessage=e=>paint(e.data.i); else setInterval(()=>paint(cur),400);
+}
+
+/* ══════════ decorative waveform inside the "room" node ══════════ */
+(function(){
+  const SVGNS='http://www.w3.org/2000/svg', host=document.getElementById('wave2');
+  if(!host)return;
+  [8,18,11,26,15,32,20,38,24,30,16,22,12,27,9,19,13,24].forEach((h,i)=>{
+    const hh=h*1.5, l=document.createElementNS(SVGNS,'line');
+    l.setAttribute('x1',36+i*11); l.setAttribute('x2',36+i*11);
+    l.setAttribute('y1',290-hh/2); l.setAttribute('y2',290+hh/2);
+    l.setAttribute('stroke','var(--live)'); l.setAttribute('stroke-width',3);
+    l.setAttribute('stroke-linecap','round'); l.setAttribute('opacity',.3+h/60);
+    host.appendChild(l);
+  });
+})();
+
+goto(0);
+</script>
+</body>
+</html>
