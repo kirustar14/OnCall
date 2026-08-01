@@ -136,26 +136,49 @@ class MedplumClient:
         ]
 
     async def write_allergy(
-        self, patient_id: str, encounter_id: str, allergen: str, source: str, spoken_at: float
+        self,
+        patient_id: str,
+        encounter_id: str,
+        allergen: str,
+        source: str,
+        spoken_at: float,
+        reaction: str = "",
+        severity: str = "",
     ) -> dict[str, Any]:
-        return await self.create_resource(
-            "AllergyIntolerance",
-            {
-                "resourceType": "AllergyIntolerance",
-                "clinicalStatus": {
-                    "coding": [
-                        {
-                            "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
-                            "code": "active",
-                        }
-                    ]
-                },
-                "code": {"text": allergen},
-                "patient": {"reference": f"Patient/{patient_id}"},
-                "encounter": {"reference": f"Encounter/{encounter_id}"},
-                "extension": self._source_extension(source, spoken_at),
+        """`code` carries the substance ONLY. Severity and reaction are separate
+        elements in FHIR for the same reason they are separate here: a safety
+        check matches on the substance, and a qualifier packed into that field
+        makes a real contraindication invisible."""
+        body: dict[str, Any] = {
+            "resourceType": "AllergyIntolerance",
+            "clinicalStatus": {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                        "code": "active",
+                    }
+                ]
             },
-        )
+            "code": {"text": allergen},
+            "patient": {"reference": f"Patient/{patient_id}"},
+            "encounter": {"reference": f"Encounter/{encounter_id}"},
+            "recordedDate": _iso(spoken_at),
+            "extension": self._source_extension(source, spoken_at),
+        }
+
+        if severity == "severe":
+            body["criticality"] = "high"
+        elif severity in ("moderate", "mild"):
+            body["criticality"] = "low"
+
+        if reaction:
+            entry: dict[str, Any] = {"manifestation": [{"text": reaction}]}
+            # AllergyIntolerance.reaction.severity is its own small value set.
+            if severity in ("severe", "moderate", "mild"):
+                entry["severity"] = severity
+            body["reaction"] = [entry]
+
+        return await self.create_resource("AllergyIntolerance", body)
 
     async def write_vital(
         self, patient_id: str, encounter_id: str, name: str, value: str, source: str, spoken_at: float

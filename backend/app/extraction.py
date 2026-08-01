@@ -39,8 +39,13 @@ Extract ONLY what is explicitly stated in THIS segment. Do not infer, do not car
 from outside the given text, and do not invent anything not said.
 
 ## FACTS
-- "allergies": known drug/food/environmental allergies. Each: {"allergen": <string>, \
+- "allergies": known drug/food/environmental allergies. Each: {"allergen": <SUBSTANCE ONLY>, \
+"reaction": <e.g. "anaphylaxis", or "" if not stated>, "severity": <"severe"|"moderate"|"mild"|"">, \
 "source": <who said it, e.g. "EMS handoff", "nurse relay", "parent via nurse", "physician">}
+  CRITICAL: "allergen" is the bare substance name and NOTHING else — "Penicillin", never \
+"Penicillin (severe, anaphylaxis as a child)". Severity and reaction have their own fields. \
+Downstream safety checks match the ordered drug against this field by drug class; qualifiers \
+packed into it cause the check to silently miss a real contraindication.
 - "vitals": vital signs (BP, HR, RR, SpO2, temp, GCS, pain score). Each: {"name": <e.g. "BP">, \
 "value": <e.g. "120/80">, "source": <as above>}
 - "medications": medications ordered or given. Each: {"name": <drug, include dose/route if \
@@ -61,6 +66,15 @@ CRITICAL RULE ON OWNERSHIP: "owner" is the person NAMED to do it. If no one was 
 MUST be an empty string. Do NOT guess an owner from whoever happens to be speaking. An unowned \
 task is a real and important state that the system needs to detect.
 
+CRITICAL RULE ON WHAT COUNTS AS WORK: only extract work somebody actually ASKED FOR out loud. \
+Do NOT create a work item out of a clinical need you infer from the situation. "No antibiotics \
+given" is a fact about what happened, not a request to give them. "She can't give us a history" \
+is a fact about the patient, not a request to go find one. If nobody asked for it, it does not \
+go in the ledger — inventing work makes the ledger untrustworthy and buries the items that were \
+genuinely requested.
+
+An order to give a drug is a medication, not a task. Do not also emit it as work.
+
 ## RESOLUTIONS (things in the open ledger that this segment resolves)
 - "I've got it", "On it", "I'll call them" -> status "acknowledged", owner = the speaker.
 - "Respiratory's at the bedside", "Pressure's 100 over 60 now" -> status "completed".
@@ -78,10 +92,12 @@ OUTPUT_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "allergen": {"type": "string"},
+                    "allergen": {"type": "string", "description": "Bare substance name only."},
+                    "reaction": {"type": "string"},
+                    "severity": {"type": "string", "enum": ["severe", "moderate", "mild", ""]},
                     "source": {"type": "string"},
                 },
-                "required": ["allergen", "source"],
+                "required": ["allergen", "reaction", "severity", "source"],
                 "additionalProperties": False,
             },
         },
@@ -364,6 +380,8 @@ async def run_extraction_and_persist(
             continue
         entry = {
             "allergen": allergen,
+            "reaction": allergy.get("reaction", "").strip(),
+            "severity": allergy.get("severity", "").strip(),
             "source": allergy.get("source", "clinician transcript"),
             "timestamp": now,
         }
@@ -371,7 +389,13 @@ async def run_extraction_and_persist(
         if case.patient_id and case.encounter_id:
             try:
                 await medplum_client.write_allergy(
-                    case.patient_id, case.encounter_id, allergen, entry["source"], now
+                    case.patient_id,
+                    case.encounter_id,
+                    allergen,
+                    entry["source"],
+                    now,
+                    reaction=entry["reaction"],
+                    severity=entry["severity"],
                 )
             except Exception:
                 logger.exception("medplum: failed to write allergy for case %s", case.case_id)

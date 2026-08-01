@@ -115,6 +115,9 @@ class WorkItem:
 @dataclass
 class CaseState:
     case_id: str
+    # A short number the agent can actually say out loud. case_id is a UUID from
+    # the browser; "Case a1d041ed" is not something you speak to a trauma team.
+    number: int = 0
     status: str = "open"  # "open" | "closed"
     created_at: float = field(default_factory=time.time)
     closed_at: Optional[float] = None
@@ -163,6 +166,10 @@ class CaseState:
     def new_work_id(self) -> str:
         return uuid.uuid4().hex[:8]
 
+    @property
+    def spoken_label(self) -> str:
+        return f"Case {self.number}" if self.number else "This case"
+
     def speaker_label(self, speaker_index: Optional[int]) -> str:
         """Diarization gives us a stable index per voice, never an identity.
         Until a human maps it, fall back to a neutral label — never guess a role."""
@@ -173,6 +180,8 @@ class CaseState:
     def to_dict(self) -> dict[str, Any]:
         return {
             "case_id": self.case_id,
+            "number": self.number,
+            "spoken_label": self.spoken_label,
             "status": self.status,
             "created_at": self.created_at,
             "closed_at": self.closed_at,
@@ -225,7 +234,8 @@ class CaseStore:
 
     def create(self, case_id: str) -> CaseState:
         with self._lock:
-            case = CaseState(case_id=case_id)
+            number = max((c.number for c in self._cases.values()), default=0) + 1
+            case = CaseState(case_id=case_id, number=number)
             self._cases[case_id] = case
             return case
 

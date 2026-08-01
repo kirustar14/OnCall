@@ -15,6 +15,7 @@ provenance, so the basis is inspectable rather than trusted.
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 
@@ -46,14 +47,32 @@ CROSS_REACTIVITY = {
 }
 
 
+def _allergen_keys(allergen: str) -> list[str]:
+    """Resolve a spoken allergy phrase to cross-reactivity keys.
+
+    What the room says is never a bare substance name. A live run produced
+    "Penicillin (severe, anaphylaxis as a child with hospitalization)", and an
+    exact dict lookup on that whole string missed — so the ordered penicillin
+    was never even checked. Match any known class named anywhere in the phrase,
+    and fall back to the leading substance before any qualifier.
+    """
+    text = allergen.strip().lower()
+    matched = [key for key in CROSS_REACTIVITY if key in text]
+    if matched:
+        return matched
+    head = re.split(r"[(,;/]| - ", text)[0].strip()
+    return [head] if head else []
+
+
 def _find_conflicts(allergies: list[dict], medications: list[dict]) -> list[tuple[dict, dict]]:
     conflicts = []
     for allergy in allergies:
-        allergen_key = allergy["allergen"].strip().lower()
-        trigger_words = CROSS_REACTIVITY.get(allergen_key, [allergen_key])
+        keys = _allergen_keys(allergy["allergen"])
+        trigger_words = {w for key in keys for w in CROSS_REACTIVITY.get(key, [key])}
+        trigger_words.update(keys)
         for med in medications:
             med_name = med["name"].strip().lower()
-            if any(word in med_name for word in trigger_words) or allergen_key in med_name:
+            if any(word and word in med_name for word in trigger_words):
                 conflicts.append((allergy, med))
     return conflicts
 
@@ -72,7 +91,10 @@ CONFLICT_SCHEMA = {
         "basis": {
             "type": "string",
             "description": (
-                "One clause a clinician would accept, stating the class relationship as fact. "
+                "ONE short clause, TWELVE WORDS MAXIMUM, stating the class relationship as fact — "
+                'e.g. "Ampicillin-sulbactam is a penicillin". This is spoken aloud over a working '
+                "trauma team, so length is a safety property: a long alert is an alert nobody hears "
+                "the end of. No pharmacology lesson, no explanation of mechanism. "
                 "Do NOT suggest what to give instead. Empty string if there is no conflict."
             ),
         },
@@ -146,27 +168,42 @@ def _time_ago(timestamp: float) -> str:
     return f"{hours} hour{'s' if hours != 1 else ''} ago"
 
 
+MAX_SPOKEN_WORDS = 45
+
+
 def _spoken_alert(case: CaseState, allergy: dict, med: dict, assessment: dict) -> str:
     """Two facts and their provenance. No instruction, no recommendation.
 
-    Reads as: what was ordered, what is on file, where it came from, and how the
-    two are related.
+    Kept short on purpose. This is spoken over a working trauma team, and an
+    alert that runs for twenty seconds is one the room talks over — length is a
+    safety property, not a style preference. Order, allergy, provenance, class,
+    stop.
     """
-    parts = [f"Case {case.case_id[:8]}. {med['name']} was just ordered."]
+    reaction = (allergy.get("reaction") or "").strip()
+    reaction_clause = f", {reaction}" if reaction else ""
 
     source = (allergy.get("source") or "").strip()
-    attribution = f", from {source}" if source else ""
-    parts.append(
-        f"There is a documented {allergy['allergen']} allergy on file, "
-        f"recorded {_time_ago(allergy['timestamp'])}{attribution}."
-    )
+    attribution = f" from {source}" if source else ""
+
+    parts = [
+        f"{case.spoken_label}. {med['name']} just ordered.",
+        f"Documented {allergy['allergen']} allergy{reaction_clause}, "
+        f"recorded {_time_ago(allergy['timestamp'])}{attribution}.",
+    ]
 
     if assessment.get("basis"):
         parts.append(assessment["basis"].rstrip("."))
     elif assessment.get("drug_class"):
         parts.append(f"{med['name']} is in the {assessment['drug_class']} class")
 
-    return " ".join(p if p.endswith(".") else p + "." for p in parts)
+    spoken = " ".join(p if p.endswith(".") else p + "." for p in parts)
+
+    # Hard backstop: the model is told twelve words, but a runaway `basis` must
+    # not turn the interrupt into a monologue.
+    words = spoken.split()
+    if len(words) > MAX_SPOKEN_WORDS:
+        spoken = " ".join(words[:MAX_SPOKEN_WORDS]).rstrip(",;") + "."
+    return spoken
 
 
 async def check_for_conflicts(case: CaseState) -> list[Alert]:

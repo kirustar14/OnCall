@@ -41,10 +41,12 @@ def _find_orphan(case: CaseState, now: float) -> WorkItem | None:
 
 
 def _prompt_text(case: CaseState, item: WorkItem) -> str:
-    label = f"Case {case.case_id[:4]}"
     if item.kind == "uncertainty":
-        return f"{label}. {item.action} is still unanswered and nobody has taken it. Who is taking it?"
-    return f"{label}. {item.action} has no owner. Who is taking it?"
+        return (
+            f"{case.spoken_label}. {item.action} is still unanswered "
+            "and nobody has taken it. Who is taking it?"
+        )
+    return f"{case.spoken_label}. {item.action} has no owner. Who is taking it?"
 
 
 async def _announce(case: CaseState, item: WorkItem) -> None:

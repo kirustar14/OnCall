@@ -15,6 +15,7 @@ from app.handoff import build_handoff
 from app.intervention import check_for_conflicts
 from app.medplum_client import medplum_client
 from app.query import answer_question
+from app.warmup import warm_schemas
 from app.watchdog import watchdog_loop
 from app.ws_manager import ws_manager
 
@@ -52,6 +53,10 @@ async def _reapply_logging_config():
 
     global _watchdog_task
     _watchdog_task = asyncio.create_task(watchdog_loop())
+
+    # Fire-and-forget: moves one-time JSON-schema compilation off the first
+    # transcript segment, where it costs ~12s of visible dead air.
+    asyncio.create_task(warm_schemas())
 
 
 @app.on_event("shutdown")

@@ -32,7 +32,9 @@ from app.extraction import _normalize
 from app.intervention import (
     CONFLICT_SCHEMA,
     CONFLICT_SYSTEM_PROMPT,
+    _allergen_keys,
     _assess_conflict,
+    _find_conflicts,
     _spoken_alert,
 )
 from app.medplum_client import MedplumClient, _trigger_seconds
@@ -388,6 +390,48 @@ def test_no_recommendations() -> None:
     check("alert: contains NO advice language", not found, f"found {found} in: {spoken}")
 
 
+# --- 8b. conflict pre-filter (regression) ------------------------------------
+
+
+def test_conflict_prefilter() -> None:
+    """Regression: a live run stored the allergen as a whole descriptive phrase,
+    the exact dict lookup missed, and an ordered penicillin was never checked.
+    The alert silently did not fire — the worst possible failure mode."""
+
+    live_string = "Penicillin (severe, anaphylaxis as a child with hospitalization)"
+    check(
+        "prefilter: qualified allergen phrase still resolves to penicillin",
+        "penicillin" in _allergen_keys(live_string),
+        f"got {_allergen_keys(live_string)}",
+    )
+
+    variants = [
+        "Penicillin",
+        "penicillin allergy",
+        "Penicillin (severe, anaphylaxis as a child with hospitalization)",
+        "Penicillin - anaphylaxis",
+        "severe penicillin allergy",
+    ]
+    meds = [{"name": "ampicillin-sulbactam 3 g IV", "status": "ordered"}]
+    for v in variants:
+        pairs = _find_conflicts([{"allergen": v, "timestamp": 0.0, "source": "x"}], meds)
+        check(f"prefilter: {v!r} vs ampicillin-sulbactam -> conflict", len(pairs) == 1, f"got {len(pairs)}")
+
+    # The whole point: the trigger word is not a substring of the allergen.
+    check(
+        "prefilter: catches a penicillin whose name doesn't contain 'penicillin'",
+        "penicillin" not in "ampicillin-sulbactam 3 g iv",
+    )
+
+    # And it must not fire on unrelated drugs.
+    safe = [{"name": "clindamycin 900 mg IV", "status": "ordered"}]
+    pairs = _find_conflicts([{"allergen": live_string, "timestamp": 0.0, "source": "x"}], safe)
+    check("prefilter: no false positive on clindamycin", len(pairs) == 0, f"got {len(pairs)}")
+
+    pairs = _find_conflicts([{"allergen": "Sulfa drugs", "timestamp": 0.0, "source": "x"}], meds)
+    check("prefilter: sulfa allergy does not fire on ampicillin-sulbactam", len(pairs) == 0, f"got {len(pairs)}")
+
+
 # --- 9. snapshot schema drift ------------------------------------------------
 
 
@@ -431,6 +475,7 @@ def main() -> int:
     test_speaker_attribution()
     test_persistence()
     test_no_recommendations()
+    test_conflict_prefilter()
     test_snapshot_drift()
 
     for name in PASSED:
