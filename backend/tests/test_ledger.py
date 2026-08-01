@@ -1,0 +1,349 @@
+"""Verification for the ledger layer.
+
+Runs with no API keys and no network: the Medplum client's HTTP layer is
+stubbed so we can assert the exact FHIR bodies we would POST.
+
+Enum values below are transcribed from Medplum's generated FHIR R4 types
+(packages/fhirtypes/dist/Task.d.ts, Provenance.d.ts) — the same definitions
+the server validates against.
+
+    ./venv/bin/python -m tests.test_ledger
+"""
+
+import asyncio
+import os
+import sys
+import tempfile
+import time
+
+from app.case_store import (
+    OPEN_STATUSES,
+    WORK_STATUS_TO_FHIR,
+    CaseState,
+    CaseStore,
+    WorkItem,
+)
+from app.deepgram_stt import _dominant_speaker
+from app.extraction import _normalize
+from app.medplum_client import MedplumClient, _trigger_seconds
+from app.watchdog import _find_orphan, _prompt_text
+
+# --- ground truth from Medplum's generated FHIR types -------------------------
+
+TASK_STATUS_VALUES = {
+    "draft", "requested", "received", "accepted", "rejected", "ready",
+    "cancelled", "in-progress", "on-hold", "failed", "completed", "entered-in-error",
+}
+TASK_INTENT_VALUES = {
+    "unknown", "proposal", "plan", "order", "original-order",
+    "reflex-order", "filler-order", "instance-order", "option",
+}
+TASK_PRIORITY_VALUES = {"routine", "urgent", "asap", "stat"}
+TASK_REQUIRED = {"resourceType", "status", "intent"}
+PROVENANCE_REQUIRED = {"resourceType", "target", "recorded", "agent"}
+
+PASSED: list[str] = []
+FAILED: list[str] = []
+
+
+def check(name: str, condition: bool, detail: str = "") -> None:
+    if condition:
+        PASSED.append(name)
+    else:
+        FAILED.append(f"{name}{' — ' + detail if detail else ''}")
+
+
+# --- 1. dedup normalization (the double-write bug) ---------------------------
+
+
+def test_normalize() -> None:
+    same = ["Penicillin", "penicillin allergy", "PENICILLIN.", "allergic to penicillin"]
+    keys = {_normalize(s) for s in same}
+    check("dedup: penicillin variants collapse to one key", len(keys) == 1, f"got {keys}")
+
+    check(
+        "dedup: distinct allergens stay distinct",
+        _normalize("penicillin") != _normalize("sulfa drugs"),
+    )
+    check(
+        "dedup: word order does not matter",
+        _normalize("sulfa drugs") == _normalize("drugs sulfa"),
+    )
+
+
+# --- 2. spoken trigger -> due date -------------------------------------------
+
+
+def test_trigger_seconds() -> None:
+    cases = [
+        ("in five minutes", 300),
+        ("in 5 minutes", 300),
+        ("in ten minutes", 600),
+        ("in 90 seconds", 90),
+        ("in two hours", 7200),
+        ("", 300),               # default
+        ("shortly", 300),        # unparseable -> default
+    ]
+    for text, expected in cases:
+        got = _trigger_seconds(text)
+        check(f"trigger: {text!r} -> {expected}s", got == expected, f"got {got}")
+
+
+# --- 3. work item state ------------------------------------------------------
+
+
+def test_work_item_states() -> None:
+    orphan = WorkItem(id="a", kind="uncertainty", action="Determine anticoagulation status")
+    check("orphan: unowned+open is an orphan", orphan.is_orphan)
+    check("orphan: unowned+open is open", orphan.is_open)
+
+    owned = WorkItem(id="b", kind="task", action="Call ortho", owner="NURSE OKAFOR")
+    check("orphan: owned is not an orphan", not owned.is_orphan)
+
+    done = WorkItem(id="c", kind="task", action="X", status="completed")
+    check("orphan: completed is not open", not done.is_open)
+    check("orphan: completed is not an orphan", not done.is_orphan)
+
+    check("status map covers every open status", all(s in WORK_STATUS_TO_FHIR for s in OPEN_STATUSES))
+    check(
+        "status map: every value is a legal FHIR Task.status",
+        set(WORK_STATUS_TO_FHIR.values()) <= TASK_STATUS_VALUES,
+        f"got {set(WORK_STATUS_TO_FHIR.values()) - TASK_STATUS_VALUES}",
+    )
+    check("status map: open -> ready", WORK_STATUS_TO_FHIR["open"] == "ready")
+    check("status map: acknowledged -> in-progress", WORK_STATUS_TO_FHIR["acknowledged"] == "in-progress")
+    check("status map: answered -> completed", WORK_STATUS_TO_FHIR["answered"] == "completed")
+
+
+# --- 4. watchdog selection ---------------------------------------------------
+
+
+def test_watchdog() -> None:
+    now = time.time()
+    case = CaseState(case_id="deadbeef")
+
+    fresh = WorkItem(id="1", kind="task", action="Fresh", opened_at=now - 1)
+    stale = WorkItem(id="2", kind="uncertainty", action="Anticoagulated?", opened_at=now - 999)
+    owned = WorkItem(id="3", kind="task", action="Call ortho", owner="OKAFOR", opened_at=now - 999)
+    asked = WorkItem(id="4", kind="task", action="Already asked", opened_at=now - 999, prompted_at=now - 5)
+    case.work = [fresh, owned, asked, stale]
+
+    picked = _find_orphan(case, now)
+    check("watchdog: picks the stale unowned item", picked is stale, f"picked {picked and picked.action!r}")
+
+    case.work = [fresh, owned, asked]
+    check("watchdog: nothing to pick when all are fresh/owned/asked", _find_orphan(case, now) is None)
+
+    older = WorkItem(id="5", kind="task", action="Older", opened_at=now - 5000)
+    case.work = [stale, older]
+    check("watchdog: picks the oldest orphan first", _find_orphan(case, now) is older)
+
+    check(
+        "watchdog: uncertainty gets question phrasing",
+        "unanswered" in _prompt_text(case, stale),
+        _prompt_text(case, stale),
+    )
+    check("watchdog: prompt asks, never assigns", "Who is taking it?" in _prompt_text(case, stale))
+
+    # open_ledger_for_prompt is what bounds the model's resolution ids
+    case.work = [stale, owned, WorkItem(id="9", kind="task", action="Done", status="completed")]
+    ledger = case.open_ledger_for_prompt()
+    check("ledger: only open items are offered for resolution", {e["id"] for e in ledger} == {"2", "3"})
+    check("ledger: entries carry id/kind/action/owner", set(ledger[0]) == {"id", "kind", "action", "owner"})
+
+
+# --- 5. the FHIR bodies we would actually POST -------------------------------
+
+
+class CapturingClient(MedplumClient):
+    """Intercepts writes so we can inspect the exact payload, no network."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.created: list[tuple[str, dict]] = []
+        self._agent_device_id = "device-1"
+
+    async def create_resource(self, resource_type, body):
+        self.created.append((resource_type, body))
+        return {"id": f"{resource_type.lower()}-1", **body}
+
+    async def read_resource(self, resource_type, resource_id):
+        return {"resourceType": resource_type, "id": resource_id, "status": "ready", "intent": "order"}
+
+    async def update_resource(self, resource_type, resource_id, body):
+        self.created.append((f"{resource_type}#update", body))
+        return body
+
+    async def ensure_agent_device(self):
+        return "device-1"
+
+
+async def test_fhir_bodies() -> None:
+    client = CapturingClient()
+    now = time.time()
+
+    # --- unowned task ---
+    await client.write_task(
+        patient_id="p1", encounter_id="e1",
+        action="Determine anticoagulation status", kind="uncertainty",
+        why_it_matters="She is going to the OR", owner_practitioner_id=None,
+        requested_by="DR. REYES", trigger="", opened_at=now,
+    )
+    _, task = client.created[-1]
+
+    check("Task: resourceType", task.get("resourceType") == "Task")
+    check("Task: required fields present", TASK_REQUIRED <= set(task), f"missing {TASK_REQUIRED - set(task)}")
+    check("Task: status is legal", task["status"] in TASK_STATUS_VALUES, task["status"])
+    check("Task: intent is legal", task["intent"] in TASK_INTENT_VALUES, task["intent"])
+    check("Task: priority is legal", task["priority"] in TASK_PRIORITY_VALUES, task["priority"])
+    check("Task: status is 'ready' per Medplum guidance", task["status"] == "ready")
+    check("Task: action goes in code.text", task["code"]["text"] == "Determine anticoagulation status")
+    check("Task: kind goes in businessStatus", task["businessStatus"]["text"] == "uncertainty")
+    check("Task: for -> Patient reference", task["for"]["reference"] == "Patient/p1")
+    check("Task: encounter -> Encounter reference", task["encounter"]["reference"] == "Encounter/e1")
+    check(
+        "Task: UNOWNED omits owner entirely (so owner:missing=true finds it)",
+        "owner" not in task,
+        f"owner present: {task.get('owner')}",
+    )
+
+    # --- owned + conditional task ---
+    await client.write_task(
+        patient_id="p1", encounter_id="e1",
+        action="Repeat the pressure", kind="conditional",
+        why_it_matters="", owner_practitioner_id="pr-9",
+        requested_by="DR. REYES", trigger="in five minutes", opened_at=now,
+    )
+    _, cond = client.created[-1]
+    check("Task: owner -> Practitioner reference", cond["owner"]["reference"] == "Practitioner/pr-9")
+    check("Task: trigger sets restriction.period.end (the due date)", "end" in cond["restriction"]["period"])
+    check("Task: spoken trigger preserved verbatim in note", "in five minutes" in cond["note"][0]["text"])
+
+    # --- resolution ---
+    await client.update_task_status(
+        task_id="t1", work_status="completed", owner_practitioner_id="pr-9",
+        evidence="She's not on any blood thinners", evidence_source="speech", at=now,
+    )
+    _, updated = client.created[-1]
+    check("Task update: status maps to FHIR completed", updated["status"] == "completed")
+    check("Task update: executionPeriod.end set on completion", "end" in updated["executionPeriod"])
+    check("Task update: evidence recorded in note with source tag", "[speech]" in updated["note"][0]["text"])
+
+    # --- provenance ---
+    await client.write_provenance(
+        target_ref="Task/t1", source="parent via nurse",
+        quote="Mom says she has a severe penicillin allergy", recorded_at=now, activity="answered",
+    )
+    _, prov = client.created[-1]
+    check("Provenance: required fields present", PROVENANCE_REQUIRED <= set(prov), f"missing {PROVENANCE_REQUIRED - set(prov)}")
+    check("Provenance: target is a reference array", prov["target"][0]["reference"] == "Task/t1")
+    check("Provenance: agent[].who is required and set", "reference" in prov["agent"][0]["who"])
+    check("Provenance: human source recorded as onBehalfOf", prov["agent"][0]["onBehalfOf"]["display"] == "parent via nurse")
+    check("Provenance: verbatim quote preserved in extension", "penicillin" in prov["extension"][0]["valueString"])
+
+
+# --- 6. speaker attribution --------------------------------------------------
+
+
+def test_speaker_attribution() -> None:
+    case = CaseState(case_id="abc")
+
+    check("speaker: no diarization -> empty label", case.speaker_label(None) == "")
+    check(
+        "speaker: unmapped index gets a neutral label, never a guessed role",
+        case.speaker_label(0) == "Speaker 0",
+        case.speaker_label(0),
+    )
+
+    case.speaker_roles[0] = "DR. REYES"
+    check("speaker: mapped index resolves to the role", case.speaker_label(0) == "DR. REYES")
+    check("speaker: other indices stay neutral", case.speaker_label(1) == "Speaker 1")
+
+    words = [
+        {"word": "i", "speaker": 1},
+        {"word": "have", "speaker": 1},
+        {"word": "ortho", "speaker": 1},
+        {"word": "ok", "speaker": 0},
+    ]
+    check("diarize: segment attributed to the dominant speaker", _dominant_speaker(words) == 1)
+    check("diarize: no speaker labels -> None", _dominant_speaker([{"word": "x"}]) is None)
+    check("diarize: empty word list -> None", _dominant_speaker([]) is None)
+
+
+# --- 7. persistence ----------------------------------------------------------
+
+
+def test_persistence() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "state.json")
+
+        store_a = CaseStore(snapshot_path=path)
+        case = store_a.create("case-1")
+        case.allergies.append({"allergen": "penicillin", "source": "parent via nurse", "timestamp": 1.0})
+        case.speaker_roles[2] = "NURSE OKAFOR"
+        case.work.append(
+            WorkItem(
+                id="w1",
+                kind="uncertainty",
+                action="Determine anticoagulation status",
+                requested_by="DR. REYES",
+                opened_at=1.0,
+            )
+        )
+        case.work.append(
+            WorkItem(
+                id="w2", kind="task", action="Call ortho", owner="NURSE OKAFOR",
+                status="acknowledged", evidence="I've got ortho", evidence_source="speech",
+                opened_at=2.0,
+            )
+        )
+        store_a.save()
+
+        check("persist: snapshot file written", os.path.exists(path))
+
+        store_b = CaseStore(snapshot_path=path)
+        restored_count = store_b.load()
+        check("persist: one case restored", restored_count == 1, f"got {restored_count}")
+
+        restored = store_b.get("case-1")
+        check("persist: case survives", restored is not None)
+        check("persist: allergies survive", restored.allergies[0]["allergen"] == "penicillin")
+        check("persist: work items survive", len(restored.work) == 2)
+        check("persist: work items rehydrate as WorkItem", isinstance(restored.work[0], WorkItem))
+        check("persist: orphan state survives the round trip", restored.work[0].is_orphan)
+        check("persist: owner survives", restored.work[1].owner == "NURSE OKAFOR")
+        check("persist: evidence survives", restored.work[1].evidence == "I've got ortho")
+        check(
+            "persist: speaker_roles int keys survive JSON",
+            restored.speaker_roles == {2: "NURSE OKAFOR"},
+            f"got {restored.speaker_roles!r}",
+        )
+        check(
+            "persist: restored case still resolves speaker labels",
+            restored.speaker_label(2) == "NURSE OKAFOR",
+        )
+
+        # A missing snapshot must be survivable, not fatal.
+        store_c = CaseStore(snapshot_path=os.path.join(tmpdir, "nope.json"))
+        check("persist: missing snapshot loads zero, no crash", store_c.load() == 0)
+
+
+def main() -> int:
+    test_normalize()
+    test_trigger_seconds()
+    test_work_item_states()
+    test_watchdog()
+    asyncio.run(test_fhir_bodies())
+    test_speaker_attribution()
+    test_persistence()
+
+    for name in PASSED:
+        print(f"  PASS  {name}")
+    for name in FAILED:
+        print(f"  FAIL  {name}")
+    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    return 1 if FAILED else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

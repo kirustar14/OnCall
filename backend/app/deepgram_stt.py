@@ -18,15 +18,53 @@ from app.config import DEEPGRAM_API_KEY
 
 logger = logging.getLogger("servare.deepgram_stt")
 
+# Terms the ledger depends on getting exactly right. Without keyterm prompting
+# these come back mangled ("ampicillin-sulbactam" is the whole intervention) —
+# and keyterm requires nova-3, which is also the clinically-tuned model.
+KEYTERMS = [
+    "ampicillin-sulbactam",
+    "penicillin",
+    "anaphylaxis",
+    "clindamycin",
+    "gentamicin",
+    "vancomycin",
+    "anticoagulated",
+    "tranexamic acid",
+    "tibia",
+    "fentanyl",
+    "GCS",
+    "ortho",
+    "respiratory",
+]
+
 DEEPGRAM_LISTEN_URL = (
     "wss://api.deepgram.com/v1/listen"
-    "?model=nova-2&language=en-US&encoding=linear16&sample_rate=16000"
+    "?model=nova-3-medical&language=en-US&encoding=linear16&sample_rate=16000"
     "&channels=1&interim_results=true&smart_format=true&punctuate=true&endpointing=300"
+    # Who said it. Without this, "who owns this task" has no input at all.
+    "&diarize=true"
+    + "".join(f"&keyterm={term.replace(' ', '%20')}" for term in KEYTERMS)
 )
 
 
+def _dominant_speaker(words: list[dict]) -> Optional[int]:
+    """Deepgram labels each word with a speaker index. A segment can straddle a
+    turn boundary, so attribute it to whoever said most of it."""
+    counts: dict[int, int] = {}
+    for word in words:
+        speaker = word.get("speaker")
+        if isinstance(speaker, int):
+            counts[speaker] = counts.get(speaker, 0) + 1
+    if not counts:
+        return None
+    return max(counts.items(), key=lambda kv: kv[1])[0]
+
+
 class DeepgramSTTSession:
-    def __init__(self, on_transcript: Callable[[str, bool], Awaitable[None]]):
+    """on_transcript(text, is_final, speaker_index) — speaker_index is None when
+    diarization has not resolved a speaker for the segment."""
+
+    def __init__(self, on_transcript: Callable[[str, bool, Optional[int]], Awaitable[None]]):
         self._on_transcript = on_transcript
         self._ws: Optional[websockets.ClientConnection] = None
         self._reader_task: Optional[asyncio.Task] = None
@@ -66,9 +104,10 @@ class DeepgramSTTSession:
                 if not text:
                     continue
 
+                speaker = _dominant_speaker(alternatives[0].get("words") or [])
                 is_final = bool(msg.get("is_final") or msg.get("speech_final"))
                 try:
-                    await self._on_transcript(text, is_final)
+                    await self._on_transcript(text, is_final, speaker)
                 except Exception:
                     logger.exception("on_transcript callback failed")
         except websockets.exceptions.ConnectionClosed:

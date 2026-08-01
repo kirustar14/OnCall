@@ -28,6 +28,7 @@ def _case_to_context(case: CaseState) -> dict:
         "allergies": case.allergies,
         "medications": case.medications,
         "notes": case.notes,
+        "work": [w.to_dict() for w in case.work],
         "transcript": case.running_transcript,
     }
 
@@ -41,8 +42,10 @@ async def answer_question(case: CaseState, question: str) -> str:
     def _call() -> str:
         response = _client.messages.create(
             model=CLAUDE_MODEL,
+            # No `thinking` param: adaptive is the Opus 5 default and effort=low
+            # already keeps this fast. Explicitly disabling thinking on Opus 5
+            # risks <thinking> tags leaking into the visible response.
             max_tokens=512,
-            thinking={"type": "disabled"},
             output_config={"effort": "low"},
             system=SYSTEM_PROMPT,
             messages=[

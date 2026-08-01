@@ -6,12 +6,45 @@ from typing import Any, Optional
 
 import httpx
 
+from app.case_store import WORK_STATUS_TO_FHIR
 from app.config import MEDPLUM_BASE_URL, MEDPLUM_CLIENT_ID, MEDPLUM_CLIENT_SECRET
 
 logger = logging.getLogger("servare.medplum")
 
 SOURCE_EXTENSION_URL = "https://servare.app/fhir/StructureDefinition/source"
 SPOKEN_AT_EXTENSION_URL = "https://servare.app/fhir/StructureDefinition/spoken-at"
+QUOTE_EXTENSION_URL = "https://servare.app/fhir/StructureDefinition/source-quote"
+PRACTITIONER_SYSTEM = "https://servare.app/role"
+DEVICE_SYSTEM = "https://servare.app/device"
+
+# "in five minutes" -> 300. Deliberately crude: the spoken trigger is preserved
+# verbatim in Task.note, and restriction.period.end is only a machine hint.
+_TRIGGER_UNITS = {
+    "second": 1,
+    "seconds": 1,
+    "minute": 60,
+    "minutes": 60,
+    "hour": 3600,
+    "hours": 3600,
+}
+_WORD_NUMBERS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "fifteen": 15,
+    "twenty": 20, "thirty": 30, "sixty": 60,
+}
+
+
+def _trigger_seconds(trigger: str, default: int = 300) -> int:
+    tokens = trigger.lower().replace("-", " ").split()
+    amount: Optional[int] = None
+    for token in tokens:
+        if token.isdigit():
+            amount = int(token)
+        elif token in _WORD_NUMBERS:
+            amount = _WORD_NUMBERS[token]
+        elif token in _TRIGGER_UNITS and amount is not None:
+            return amount * _TRIGGER_UNITS[token]
+    return default
 
 
 class MedplumClient:
@@ -22,6 +55,7 @@ class MedplumClient:
         self._access_token: Optional[str] = None
         self._token_expires_at: float = 0.0
         self._http = httpx.AsyncClient(timeout=15.0)
+        self._agent_device_id: Optional[str] = None
 
     @property
     def configured(self) -> bool:
@@ -166,6 +200,211 @@ class MedplumClient:
                 "extension": self._source_extension(source, spoken_at),
             },
         )
+
+    # --- workflow: Task + Provenance ---------------------------------------------------------
+
+    async def read_resource(self, resource_type: str, resource_id: str) -> dict[str, Any]:
+        headers = await self._headers()
+        resp = await self._http.get(
+            f"{self._base_url}fhir/R4/{resource_type}/{resource_id}", headers=headers
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def update_resource(self, resource_type: str, resource_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        headers = await self._headers()
+        resp = await self._http.put(
+            f"{self._base_url}fhir/R4/{resource_type}/{resource_id}", json=body, headers=headers
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def ensure_practitioner(self, label: str) -> str:
+        """Task.owner is a Reference — an owner needs a real resource. Reuse by
+        identifier so repeated roles across cases don't pile up duplicates."""
+        found = await self.search("Practitioner", {"identifier": f"{PRACTITIONER_SYSTEM}|{label}"})
+        for entry in found.get("entry", []):
+            existing_id = entry.get("resource", {}).get("id")
+            if existing_id:
+                return existing_id
+
+        created = await self.create_resource(
+            "Practitioner",
+            {
+                "resourceType": "Practitioner",
+                "identifier": [{"system": PRACTITIONER_SYSTEM, "value": label}],
+                "name": [{"text": label}],
+            },
+        )
+        return created["id"]
+
+    async def ensure_agent_device(self) -> Optional[str]:
+        """The Servare agent itself, as the Provenance recorder."""
+        if self._agent_device_id:
+            return self._agent_device_id
+        try:
+            found = await self.search("Device", {"identifier": f"{DEVICE_SYSTEM}|servare-agent"})
+            for entry in found.get("entry", []):
+                existing_id = entry.get("resource", {}).get("id")
+                if existing_id:
+                    self._agent_device_id = existing_id
+                    return existing_id
+
+            created = await self.create_resource(
+                "Device",
+                {
+                    "resourceType": "Device",
+                    "identifier": [{"system": DEVICE_SYSTEM, "value": "servare-agent"}],
+                    "deviceName": [{"name": "Servare voice agent", "type": "user-friendly-name"}],
+                    "status": "active",
+                },
+            )
+            self._agent_device_id = created["id"]
+            return self._agent_device_id
+        except Exception:
+            logger.exception("medplum: failed to ensure agent Device")
+            return None
+
+    async def write_task(
+        self,
+        patient_id: str,
+        encounter_id: str,
+        action: str,
+        kind: str,
+        why_it_matters: str,
+        owner_practitioner_id: Optional[str],
+        requested_by: str,
+        trigger: str,
+        opened_at: float,
+    ) -> dict[str, Any]:
+        """Create a FHIR Task for a spoken work item.
+
+        `status` and `intent` are both REQUIRED by the spec. Medplum's own docs
+        recommend `ready` as the actionable state for single-system implementations
+        (requested/received/accepted are for cross-system handoffs).
+        """
+        body: dict[str, Any] = {
+            "resourceType": "Task",
+            "status": "ready",
+            "intent": "order",
+            # Trauma resuscitation — these are not routine.
+            "priority": "stat",
+            "code": {"text": action},
+            "description": why_it_matters or action,
+            # businessStatus carries the implementation-specific nuance: whether
+            # this is an action, an open question, or a timed re-check.
+            "businessStatus": {"text": kind},
+            "for": {"reference": f"Patient/{patient_id}"},
+            "encounter": {"reference": f"Encounter/{encounter_id}"},
+            "authoredOn": _iso(opened_at),
+            "extension": self._source_extension(requested_by or "clinician transcript", opened_at),
+        }
+
+        if owner_practitioner_id:
+            body["owner"] = {"reference": f"Practitioner/{owner_practitioner_id}"}
+        # No owner key at all when unowned — that is what makes
+        # `Task?owner:missing=true` return it.
+
+        if trigger:
+            # restriction.period.end is the FHIR "due date".
+            body["restriction"] = {"period": {"end": _iso(opened_at + _trigger_seconds(trigger))}}
+            body.setdefault("note", []).append(
+                {"text": f"Trigger as spoken: {trigger}", "time": _iso(opened_at)}
+            )
+
+        return await self.create_resource("Task", body)
+
+    async def update_task_status(
+        self,
+        task_id: str,
+        work_status: str,
+        owner_practitioner_id: Optional[str],
+        evidence: str,
+        evidence_source: str,
+        at: float,
+    ) -> dict[str, Any]:
+        """Read-modify-write. Simpler and safer than json-patch here, because
+        `note` may or may not already exist on the resource."""
+        task = await self.read_resource("Task", task_id)
+        task["status"] = WORK_STATUS_TO_FHIR.get(work_status, "ready")
+        task["lastModified"] = _iso(at)
+
+        if owner_practitioner_id:
+            task["owner"] = {"reference": f"Practitioner/{owner_practitioner_id}"}
+
+        execution = task.get("executionPeriod") or {}
+        execution.setdefault("start", _iso(at))
+        if work_status in ("completed", "answered"):
+            execution["end"] = _iso(at)
+        task["executionPeriod"] = execution
+
+        if evidence:
+            notes = task.get("note") or []
+            notes.append({"text": f"[{evidence_source}] {evidence}", "time": _iso(at)})
+            task["note"] = notes
+
+        return await self.update_resource("Task", task_id, task)
+
+    async def write_provenance(
+        self,
+        target_ref: str,
+        source: str,
+        quote: str,
+        recorded_at: float,
+        activity: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Who asserted this, when, and on whose authority.
+
+        This is what lets a clinician independently review the basis for
+        anything the system surfaced — the whole reason we can state facts
+        without making recommendations.
+        """
+        device_id = await self.ensure_agent_device()
+        if not device_id:
+            return None
+
+        agent: dict[str, Any] = {
+            "type": {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/provenance-participant-type",
+                        "code": "author",
+                    }
+                ]
+            },
+            "who": {"reference": f"Device/{device_id}", "display": "Servare voice agent"},
+        }
+        if source:
+            # The human the assertion actually came from — "parent via nurse",
+            # "EMS handoff" — recorded as free text on the agent entry.
+            agent["onBehalfOf"] = {"display": source}
+
+        body: dict[str, Any] = {
+            "resourceType": "Provenance",
+            "target": [{"reference": target_ref}],
+            "recorded": _iso(recorded_at),
+            "occurredDateTime": _iso(recorded_at),
+            "agent": [agent],
+        }
+        if activity:
+            body["activity"] = {"text": activity}
+        if quote:
+            body["extension"] = [{"url": QUOTE_EXTENSION_URL, "valueString": quote}]
+
+        return await self.create_resource("Provenance", body)
+
+    async def find_unowned_tasks(self, encounter_id: str) -> list[dict[str, Any]]:
+        """FHIR-native unowned-work query. `owner:missing=true` is the standard
+        search modifier for an unassigned Task — this is not a custom concept."""
+        found = await self.search(
+            "Task",
+            {
+                "encounter": f"Encounter/{encounter_id}",
+                "owner:missing": "true",
+                "status": "ready",
+            },
+        )
+        return [e.get("resource", {}) for e in found.get("entry", [])]
 
     async def close_encounter(self, encounter_id: str) -> None:
         headers = await self._headers()

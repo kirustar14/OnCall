@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { startAudioCapture, stopAudioCapture } from '../lib/audioCapture';
 
 const WS_BASE = import.meta.env.VITE_WS_BASE || `ws://${window.location.hostname}:8000`;
+const API_BASE = import.meta.env.VITE_API_BASE || `http://${window.location.hostname}:8000`;
 
 const emptyStructured = {
   vitals: [],
@@ -9,7 +10,21 @@ const emptyStructured = {
   medications: [],
   notes: [],
   case_details: {},
+  work: [],
 };
+
+function playBase64Audio(b64, mime) {
+  try {
+    const byteChars = atob(b64);
+    const byteNumbers = new Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([new Uint8Array(byteNumbers)], { type: mime });
+    const audio = new Audio(URL.createObjectURL(blob));
+    audio.play().catch((e) => console.warn('agent audio playback blocked', e));
+  } catch (err) {
+    console.warn('failed to decode/play agent audio', err);
+  }
+}
 
 export function useCaseSocket(caseId) {
   const [status, setStatus] = useState('connecting'); // connecting | recording | closed | error
@@ -18,6 +33,10 @@ export function useCaseSocket(caseId) {
   const [structured, setStructured] = useState(emptyStructured);
   const [alerts, setAlerts] = useState([]);
   const [videoStream, setVideoStream] = useState(null);
+  // The agent asking the room who owns something. Transient — clears on answer.
+  const [unownedPrompt, setUnownedPrompt] = useState(null);
+  const [handoffBrief, setHandoffBrief] = useState(null);
+  const [handoffLoading, setHandoffLoading] = useState(false);
 
   const wsRef = useRef(null);
   const audioCaptureRef = useRef(null);
@@ -25,20 +44,6 @@ export function useCaseSocket(caseId) {
 
   useEffect(() => {
     let cancelled = false;
-
-    function playBase64Audio(b64, mime) {
-      try {
-        const byteChars = atob(b64);
-        const byteNumbers = new Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-        const blob = new Blob([new Uint8Array(byteNumbers)], { type: mime });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.play().catch((e) => console.warn('alert audio playback blocked', e));
-      } catch (err) {
-        console.warn('failed to decode/play alert audio', err);
-      }
-    }
 
     function handleMessage(msg) {
       if (msg.type === 'transcript') {
@@ -49,9 +54,22 @@ export function useCaseSocket(caseId) {
           setInterim(msg.text);
         }
       } else if (msg.type === 'case_data') {
-        setStructured(msg.data);
+        setStructured({ ...emptyStructured, ...msg.data });
+        // If the item we asked about now has an owner, stop showing the ask.
+        setUnownedPrompt((prev) => {
+          if (!prev) return prev;
+          const item = (msg.data.work || []).find((w) => w.id === prev.work_id);
+          return item && (item.owner || item.status !== 'open') ? null : prev;
+        });
       } else if (msg.type === 'alert') {
         setAlerts((prev) => [...prev, msg.alert]);
+        if (msg.audio_b64) playBase64Audio(msg.audio_b64, msg.audio_mime || 'audio/mpeg');
+      } else if (msg.type === 'unowned_prompt') {
+        setUnownedPrompt(msg);
+        if (msg.audio_b64) playBase64Audio(msg.audio_b64, msg.audio_mime || 'audio/mpeg');
+      } else if (msg.type === 'handoff') {
+        setHandoffBrief(msg.brief);
+        setHandoffLoading(false);
         if (msg.audio_b64) playBase64Audio(msg.audio_b64, msg.audio_mime || 'audio/mpeg');
       } else if (msg.type === 'status' && msg.status === 'closed') {
         setStatus('closed');
@@ -124,5 +142,37 @@ export function useCaseSocket(caseId) {
     setStatus('closed');
   }, []);
 
-  return { status, transcript, interim, structured, alerts, videoStream, endCase };
+  const requestHandoff = useCallback(async () => {
+    setHandoffLoading(true);
+    try {
+      // The brief also arrives over the socket with audio; this call is what
+      // triggers it, and the response is the fallback if the socket is gone.
+      const res = await fetch(`${API_BASE}/api/handoff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ case_id: caseId }),
+      });
+      const brief = await res.json();
+      if (!brief.error) setHandoffBrief(brief);
+    } catch (err) {
+      console.error('handoff request failed', err);
+    } finally {
+      setHandoffLoading(false);
+    }
+  }, [caseId]);
+
+  return {
+    status,
+    transcript,
+    interim,
+    structured,
+    alerts,
+    videoStream,
+    unownedPrompt,
+    handoffBrief,
+    handoffLoading,
+    endCase,
+    requestHandoff,
+    dismissHandoff: () => setHandoffBrief(null),
+  };
 }

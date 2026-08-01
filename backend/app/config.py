@@ -11,3 +11,7 @@ MEDPLUM_CLIENT_SECRET = os.environ.get("MEDPLUM_CLIENT_SECRET", "")
 MEDPLUM_BASE_URL = os.environ.get("MEDPLUM_BASE_URL", "https://api.medplum.com/")
 
 CLAUDE_MODEL = "claude-opus-5"
+
+# How long an unowned work item sits before the agent asks the room who owns it.
+# Minutes would be right in a real bay; short here so a demo doesn't stall.
+UNOWNED_PROMPT_DELAY_SECONDS = float(os.environ.get("UNOWNED_PROMPT_DELAY_SECONDS", "15"))

@@ -1,12 +1,19 @@
 """Claude extraction agent: turns finalized transcript text into structured
-clinical facts, then writes each fact into Medplum under the case's Encounter."""
+clinical facts AND work items, then writes each into Medplum under the case's
+Encounter.
 
+Extraction is stateful. The open ledger is passed *in* with every call, because
+"I've got it" only means something against a list of things that are open.
+"""
+
+import asyncio
+import json
 import logging
 import time
 
 import anthropic
 
-from app.case_store import CaseState
+from app.case_store import CaseState, WorkItem
 from app.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 from app.medplum_client import medplum_client
 
@@ -14,26 +21,54 @@ logger = logging.getLogger("servare.extraction")
 
 _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 
-SYSTEM_PROMPT = """You are a clinical extraction agent listening to a live ER transcript \
-(EMS handoff, nurse relay, physician orders, bystander statements). Given a new segment of \
-transcript, extract ONLY facts that are explicitly stated in THIS segment — do not infer or \
-carry forward facts from outside the given text, and do not invent anything not said.
+EMPTY_EXTRACTION = {
+    "allergies": [],
+    "vitals": [],
+    "medications": [],
+    "notes": "",
+    "case_details": {},
+    "tasks": [],
+    "resolutions": [],
+}
 
-Extract into these fields:
-- "allergies": known drug/food/environmental allergies. Each item: {"allergen": <string>, \
+SYSTEM_PROMPT = """You maintain the shared state of an active ER resuscitation from what the team \
+says out loud (EMS handoff, nurse relay, physician orders, bystander statements). You track two \
+things: clinical FACTS, and WORK.
+
+Extract ONLY what is explicitly stated in THIS segment. Do not infer, do not carry forward facts \
+from outside the given text, and do not invent anything not said.
+
+## FACTS
+- "allergies": known drug/food/environmental allergies. Each: {"allergen": <string>, \
 "source": <who said it, e.g. "EMS handoff", "nurse relay", "parent via nurse", "physician">}
-- "vitals": vital signs (BP, HR, RR, SpO2, temp, GCS, pain score, etc). Each item: \
-{"name": <e.g. "BP", "HR">, "value": <e.g. "120/80", "98 bpm">, "source": <as above>}
-- "medications": medications ordered or given. Each item: {"name": <drug name, include dose/route \
-if stated>, "status": "ordered" or "given", "source": <as above>}
-- "notes": any other explicitly stated case detail (age, sex, mechanism of injury, chief complaint, \
-past medical history) as a short free-text sentence. Empty string if nothing else notable.
-- "case_details": structured demographic/incident facts if stated: {"age": <string or "">, \
-"sex": <string or "">, "mechanism": <string or "">}
+- "vitals": vital signs (BP, HR, RR, SpO2, temp, GCS, pain score). Each: {"name": <e.g. "BP">, \
+"value": <e.g. "120/80">, "source": <as above>}
+- "medications": medications ordered or given. Each: {"name": <drug, include dose/route if \
+stated>, "status": "ordered" or "given", "source": <as above>}
+- "notes": any other explicitly stated case detail (age, sex, mechanism, chief complaint, PMH) \
+as a short sentence. Empty string if nothing notable.
+- "case_details": {"age": <string or "">, "sex": <string or "">, "mechanism": <string or "">}
 
-If a category has nothing new in this segment, return an empty array/string for it. Infer "source" \
-from context (e.g. "medics say", "the mother told the nurse") — default to "clinician transcript" if \
-no source is stated."""
+## WORK (new items requested in this segment)
+- "task": an action someone must do. "Call respiratory", "Get two units up here".
+- "uncertainty": an open question with no answer yet. "Find out whether she's anticoagulated", \
+"Does anyone know her history?" These are the dangerous ones — a question nobody owns is a \
+question nobody answers.
+- "conditional": an action tied to a future trigger. "Repeat the pressure in five minutes" \
+(put "in five minutes" in "trigger").
+
+CRITICAL RULE ON OWNERSHIP: "owner" is the person NAMED to do it. If no one was named, "owner" \
+MUST be an empty string. Do NOT guess an owner from whoever happens to be speaking. An unowned \
+task is a real and important state that the system needs to detect.
+
+## RESOLUTIONS (things in the open ledger that this segment resolves)
+- "I've got it", "On it", "I'll call them" -> status "acknowledged", owner = the speaker.
+- "Respiratory's at the bedside", "Pressure's 100 over 60 now" -> status "completed".
+- "She's not on anticoagulants", "Mom says no blood thinners" -> status "answered".
+- Only emit a resolution when it clearly maps to an item in the open ledger you were given. \
+NEVER invent a task_id. If nothing matches, return an empty resolutions array.
+
+Return empty arrays/strings where nothing applies. Silence is a valid answer."""
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -87,65 +122,257 @@ OUTPUT_SCHEMA = {
             "required": ["age", "sex", "mechanism"],
             "additionalProperties": False,
         },
+        "tasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["task", "uncertainty", "conditional"]},
+                    "action": {"type": "string"},
+                    "owner": {"type": "string"},
+                    "requested_by": {"type": "string"},
+                    "trigger": {"type": "string"},
+                    "why_it_matters": {"type": "string"},
+                    "source_quote": {"type": "string"},
+                },
+                "required": [
+                    "kind",
+                    "action",
+                    "owner",
+                    "requested_by",
+                    "trigger",
+                    "why_it_matters",
+                    "source_quote",
+                ],
+                "additionalProperties": False,
+            },
+        },
+        "resolutions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string"},
+                    "status": {
+                        "type": "string",
+                        "enum": ["acknowledged", "completed", "answered"],
+                    },
+                    "owner": {"type": "string"},
+                    "evidence": {"type": "string"},
+                },
+                "required": ["task_id", "status", "owner", "evidence"],
+                "additionalProperties": False,
+            },
+        },
     },
-    "required": ["allergies", "vitals", "medications", "notes", "case_details"],
+    "required": [
+        "allergies",
+        "vitals",
+        "medications",
+        "notes",
+        "case_details",
+        "tasks",
+        "resolutions",
+    ],
     "additionalProperties": False,
 }
 
 
-async def extract_from_segment(transcript_segment: str) -> dict:
-    """Blocking Anthropic call run in a thread; returns the parsed structured dict."""
-    import asyncio
-    import json
+def _normalize(text: str) -> str:
+    """Loose key for dedup. 'Penicillin' / 'penicillin allergy' / 'PENICILLIN.'
+    all collapse to the same key — an exact lowercase match double-writes."""
+    cleaned = "".join(c for c in text.lower() if c.isalnum() or c.isspace())
+    tokens = [t for t in cleaned.split() if t not in {"allergy", "allergic", "to", "a", "an", "the"}]
+    return " ".join(sorted(tokens))
 
+
+async def extract_from_segment(
+    transcript_segment: str, open_ledger: list[dict], speaker_label: str = ""
+) -> dict:
+    """Blocking Anthropic call run in a thread; returns the parsed structured dict."""
     if _client is None:
         logger.warning("ANTHROPIC_API_KEY not set — skipping extraction")
-        return {"allergies": [], "vitals": [], "medications": [], "notes": "", "case_details": {}}
+        return dict(EMPTY_EXTRACTION)
+
+    ledger_text = json.dumps(open_ledger, indent=2) if open_ledger else "(empty)"
+    speaker_line = (
+        f"Diarization says this segment was spoken by: {speaker_label}\n"
+        "Use that for `requested_by` and for the owner on a claim like \"I've got it\" — unless "
+        "the words themselves name a different source (\"Mom just told me\" means the source is "
+        "the mother, relayed by this speaker).\n\n"
+        if speaker_label
+        else ""
+    )
 
     def _call() -> dict:
         response = _client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=2048,
-            thinking={"type": "disabled"},
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA}},
+            # No `thinking` param: adaptive is the Opus 5 default. Explicitly
+            # disabling it risks <thinking> tags leaking into the response and
+            # corrupting the JSON parse below. effort=low keeps it fast.
+            max_tokens=4096,
+            output_config={
+                "effort": "low",
+                "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA},
+            },
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": f"New transcript segment:\n\n{transcript_segment}"}],
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"Open ledger (ONLY these ids may appear in resolutions):\n{ledger_text}\n\n"
+                        f"{speaker_line}"
+                        f"New transcript segment:\n\n{transcript_segment}"
+                    ),
+                }
+            ],
         )
         text = next(b.text for b in response.content if b.type == "text")
         return json.loads(text)
 
-    return await asyncio.to_thread(_call)
+    try:
+        return await asyncio.to_thread(_call)
+    except Exception:
+        logger.exception("extraction call failed")
+        return dict(EMPTY_EXTRACTION)
 
 
-async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -> dict:
-    """Extract structured facts from a transcript segment, merge into the case's
-    in-memory structured data, and write each fact to Medplum. Returns the diff
-    (newly extracted facts) so callers (e.g. the intervention agent) can react."""
+async def _ensure_patient_and_encounter(case: CaseState) -> None:
+    if not medplum_client.configured:
+        return
+    if case.patient_id and case.encounter_id:
+        return
+    try:
+        patient_id, encounter_id = await medplum_client.create_patient_and_encounter(
+            case.case_id, case.case_details.get("age", "") or f"Case {case.case_id[:8]}"
+        )
+        case.patient_id = patient_id
+        case.encounter_id = encounter_id
+    except Exception:
+        logger.exception("medplum: failed to create Patient/Encounter for case %s", case.case_id)
 
-    extracted = await extract_from_segment(transcript_segment)
+
+async def _owner_reference(case: CaseState, owner_label: str) -> str | None:
+    """Task.owner is a Reference, not a string — an owner needs a real
+    Practitioner resource. Created once per role per case and cached."""
+    if not owner_label or not medplum_client.configured:
+        return None
+    existing = case.practitioner_ids.get(owner_label)
+    if existing:
+        return existing
+    try:
+        practitioner_id = await medplum_client.ensure_practitioner(owner_label)
+        case.practitioner_ids[owner_label] = practitioner_id
+        return practitioner_id
+    except Exception:
+        logger.exception("medplum: failed to create Practitioner for %s", owner_label)
+        return None
+
+
+async def _persist_work_item(case: CaseState, item: WorkItem) -> None:
+    if not (medplum_client.configured and case.patient_id and case.encounter_id):
+        return
+    owner_id = await _owner_reference(case, item.owner)
+    try:
+        task = await medplum_client.write_task(
+            patient_id=case.patient_id,
+            encounter_id=case.encounter_id,
+            action=item.action,
+            kind=item.kind,
+            why_it_matters=item.why_it_matters,
+            owner_practitioner_id=owner_id,
+            requested_by=item.requested_by,
+            trigger=item.trigger,
+            opened_at=item.opened_at,
+        )
+        item.fhir_task_id = task.get("id")
+        await medplum_client.write_provenance(
+            target_ref=f"Task/{item.fhir_task_id}",
+            source=item.requested_by or "clinician transcript",
+            quote=item.source_quote,
+            recorded_at=item.opened_at,
+        )
+    except Exception:
+        logger.exception("medplum: failed to write Task for case %s", case.case_id)
+
+
+async def apply_resolution(
+    case: CaseState,
+    item: WorkItem,
+    status: str,
+    owner: str,
+    evidence: str,
+    evidence_source: str,
+) -> None:
+    """Move a work item forward and mirror the change into Medplum."""
+    item.status = status
+    if owner:
+        item.owner = owner
+    item.evidence = evidence
+    item.evidence_source = evidence_source
+    item.resolved_at = None if status == "acknowledged" else time.time()
+
+    if not (medplum_client.configured and item.fhir_task_id):
+        return
+    owner_id = await _owner_reference(case, item.owner)
+    try:
+        await medplum_client.update_task_status(
+            task_id=item.fhir_task_id,
+            work_status=status,
+            owner_practitioner_id=owner_id,
+            evidence=evidence,
+            evidence_source=evidence_source,
+            at=time.time(),
+        )
+        await medplum_client.write_provenance(
+            target_ref=f"Task/{item.fhir_task_id}",
+            source=item.owner or "clinician transcript",
+            quote=evidence,
+            recorded_at=time.time(),
+            activity=status,
+        )
+    except Exception:
+        logger.exception("medplum: failed to update Task %s", item.fhir_task_id)
+
+
+async def run_extraction_and_persist(
+    case: CaseState, transcript_segment: str, speaker_label: str = ""
+) -> dict:
+    """Extract facts + work from a segment, merge into case state, write to
+    Medplum. Returns the raw extraction so callers can react.
+
+    `speaker_label` comes from diarization + the case's role mapping. It is used
+    only as a fallback attribution — the model's own reading of who was speaking
+    wins, because "Mom told me" is a different source than the nurse saying it.
+    """
+
+    extracted = await extract_from_segment(
+        transcript_segment, case.open_ledger_for_prompt(), speaker_label
+    )
     now = time.time()
 
-    if medplum_client.configured and (case.patient_id is None or case.encounter_id is None):
-        try:
-            patient_id, encounter_id = await medplum_client.create_patient_and_encounter(
-                case.case_id, case.case_details.get("age", "") or f"Case {case.case_id[:8]}"
-            )
-            case.patient_id = patient_id
-            case.encounter_id = encounter_id
-        except Exception:
-            logger.exception("medplum: failed to create Patient/Encounter for case %s", case.case_id)
+    await _ensure_patient_and_encounter(case)
+
+    # --- facts ---------------------------------------------------------------
 
     for allergy in extracted.get("allergies", []):
         allergen = allergy.get("allergen", "").strip()
         if not allergen:
             continue
-        if any(a["allergen"].lower() == allergen.lower() for a in case.allergies):
+        key = _normalize(allergen)
+        if any(_normalize(a["allergen"]) == key for a in case.allergies):
             continue
-        entry = {"allergen": allergen, "source": allergy.get("source", "clinician transcript"), "timestamp": now}
+        entry = {
+            "allergen": allergen,
+            "source": allergy.get("source", "clinician transcript"),
+            "timestamp": now,
+        }
         case.allergies.append(entry)
         if case.patient_id and case.encounter_id:
             try:
-                await medplum_client.write_allergy(case.patient_id, case.encounter_id, allergen, entry["source"], now)
+                await medplum_client.write_allergy(
+                    case.patient_id, case.encounter_id, allergen, entry["source"], now
+                )
             except Exception:
                 logger.exception("medplum: failed to write allergy for case %s", case.case_id)
 
@@ -154,11 +381,18 @@ async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -
         value = vital.get("value", "").strip()
         if not name or not value:
             continue
-        entry = {"name": name, "value": value, "source": vital.get("source", "clinician transcript"), "timestamp": now}
+        entry = {
+            "name": name,
+            "value": value,
+            "source": vital.get("source", "clinician transcript"),
+            "timestamp": now,
+        }
         case.vitals.append(entry)
         if case.patient_id and case.encounter_id:
             try:
-                await medplum_client.write_vital(case.patient_id, case.encounter_id, name, value, entry["source"], now)
+                await medplum_client.write_vital(
+                    case.patient_id, case.encounter_id, name, value, entry["source"], now
+                )
             except Exception:
                 logger.exception("medplum: failed to write vital for case %s", case.case_id)
 
@@ -166,7 +400,8 @@ async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -
         name = med.get("name", "").strip()
         if not name:
             continue
-        if any(m["name"].lower() == name.lower() for m in case.medications):
+        key = _normalize(name)
+        if any(_normalize(m["name"]) == key for m in case.medications):
             continue
         entry = {
             "name": name,
@@ -192,5 +427,44 @@ async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -
         val = (details.get(key) or "").strip()
         if val and not case.case_details.get(key):
             case.case_details[key] = val
+
+    # --- work ----------------------------------------------------------------
+
+    for raw in extracted.get("tasks", []):
+        action = raw.get("action", "").strip()
+        if not action:
+            continue
+        key = _normalize(action)
+        if any(_normalize(w.action) == key for w in case.work if w.is_open):
+            continue
+        item = WorkItem(
+            id=case.new_work_id(),
+            kind=raw.get("kind", "task"),
+            action=action,
+            owner=raw.get("owner", "").strip(),
+            requested_by=raw.get("requested_by", "").strip(),
+            trigger=raw.get("trigger", "").strip(),
+            why_it_matters=raw.get("why_it_matters", "").strip(),
+            source_quote=raw.get("source_quote", "").strip(),
+            opened_at=now,
+        )
+        case.work.append(item)
+        await _persist_work_item(case, item)
+
+    for res in extracted.get("resolutions", []):
+        item = case.find_work(res.get("task_id", ""))
+        if item is None:
+            # The model referenced an id that isn't in the open ledger. Drop it
+            # rather than guessing — a wrong completion is worse than a missed one.
+            logger.warning("resolution referenced unknown task_id %r", res.get("task_id"))
+            continue
+        await apply_resolution(
+            case,
+            item,
+            status=res.get("status", "acknowledged"),
+            owner=res.get("owner", "").strip(),
+            evidence=res.get("evidence", "").strip(),
+            evidence_source="speech",
+        )
 
     return extracted

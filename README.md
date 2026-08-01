@@ -50,30 +50,94 @@ require either `localhost` or HTTPS.
 ```
 Browser (getUserMedia) --PCM16 audio--> /ws/case/{id} (FastAPI WS)
                                               |
-                                    Deepgram live STT session
+                          Deepgram nova-3-medical, diarize=true + keyterms
                                               |
-                                  finalized transcript segment
+                         finalized segment + speaker index -> role label
                                               |
-                              Claude structured extraction (JSON schema)
+                    Claude structured extraction (JSON schema), STATEFUL:
+                    the open ledger goes IN, so "I've got it" can resolve
                                               |
-                        Medplum writes (AllergyIntolerance / Observation / MedicationRequest)
+              +-------------------------------+-------------------------------+
+              |                               |                               |
+        clinical FACTS                    WORK items                     RESOLUTIONS
+              |                               |                               |
+   AllergyIntolerance                     FHIR Task                 status -> in-progress /
+   Observation                          (+ Provenance)              completed, evidence in note
+   MedicationRequest                          |
+              |                               |
+              +--------> intervention check (allergy x medication)
                                               |
-                          Intervention check (allergy x medication conflict)
-                                              |
-                     Claude + web_search -> alternative medication + spoken alert
-                                              |
-                              Deepgram TTS -> audio back over WS --> browser
+                             Deepgram Aura TTS -> audio over WS -> browser
+
+     ... and in parallel, independent of anyone speaking:
+
+     watchdog loop --> unowned + open + past grace period --> "Who is taking it?"
 ```
 
-Case state lives in an in-memory store (`backend/app/case_store.py`) — sufficient for a
-demo session; nothing survives a backend restart.
+### The ledger
+
+`Task` is not a stretch here — it is what the resource is for:
+
+| Ledger concept | FHIR |
+|---|---|
+| the request | `Task.code.text` |
+| why it matters | `Task.description` |
+| task / uncertainty / conditional | `Task.businessStatus` |
+| who owns it | `Task.owner` → `Practitioner` (omitted entirely when unowned) |
+| **unowned work** | `GET /Task?owner:missing=true&status=ready` — standard search, not a custom concept |
+| "in five minutes" | `Task.restriction.period.end` (verbatim trigger kept in `Task.note`) |
+| evidence of completion | `Task.note`, tagged `[speech]` / `[vision]` |
+| when it was actioned | `Task.executionPeriod` |
+| who asserted it, on whose authority | `Provenance` (`agent.who` = agent Device, `agent.onBehalfOf` = human source) |
+
+Status mapping follows Medplum's own guidance — `ready` is the actionable state for a
+single-system implementation; `requested`/`received`/`accepted` are for cross-system handoffs:
+
+    open -> ready     acknowledged -> in-progress     completed/answered -> completed
+
+`Provenance` is what lets a clinician independently review the basis for anything the system
+surfaced. That is the whole reason the agent can state facts without making recommendations.
+
+### Persistence
+
+In-memory, with an atomic JSON snapshot on disk (`SERVARE_SNAPSHOT`, default
+`.servare-state.json`) rewritten on mutation and reloaded on startup — so `--reload` firing
+mid-demo doesn't wipe the ledger.
+
+### Speaker attribution
+
+Diarization tells us reliably *that* the speaker changed; it can never tell us *who* they are.
+A human maps each voice index to a role once via `POST /api/speaker-role`, and from then on
+every task that voice claims is attributed correctly. Deliberately a label on an index — not
+biometric identification.
 
 ## Demo script
 
-1. **EMS handoff** — establishes a case: "20 year old male, motor vehicle collision, blood
-   pressure 90 over 60, heart rate 130, medic says he has a documented penicillin allergy."
-2. **Outside source update** — a nurse relays new info mid-case: "Mom just told me at the
-   bedside he's also allergic to sulfa drugs."
-3. **Conflicting order** — a doctor orders a conflicting medication: "Start him on amoxicillin
-   500 milligrams IV." This should trigger the intervention agent: a spoken + on-screen alert
-   naming the penicillin allergy and a suggested alternative (e.g. vancomycin/azithromycin).
+The arc is **fill the ledger, disturb it, drain it.**
+
+1. **EMS handoff** — establishes the case, and establishes what we *don't* know:
+   "Nineteen year old female, front seat passenger, GCS 13, she's confused, **she can't give us
+   a history**. Open left tibia fracture, gross contamination. Heart rate 122, blood pressure
+   104 over 68. Splinted in the field, no antibiotics given."
+2. **Unowned work appears** — the physician fires off three requests at once: "Someone find out
+   whether she's anticoagulated, get ortho down here, and repeat that pressure in five minutes."
+   Nobody is named for the first one.
+3. **One claimed, one dangling** — a nurse takes one: "I've got ortho, I'm calling them now."
+   Ortho goes `in-progress` with an owner; anticoagulation stays `NO OWNER`.
+4. **The agent asks the room** — after the grace period the watchdog speaks: *"Determine
+   anticoagulation status is still unanswered and nobody has taken it. Who is taking it?"*
+   It asks. It never assigns, and it never advises.
+5. **Outside-source update** — "Mom just told me she has a severe penicillin allergy,
+   anaphylaxis as a child." The `AllergyIntolerance` lands with a `Provenance` recording the
+   mother as the source, relayed by the nurse.
+6. **Conflicting order** — "Let's get **ampicillin-sulbactam**, three grams IV, push it."
+   Checked against the documented allergy by drug *class*, not string match — "ampicillin-sulbactam"
+   contains no substring a keyword matcher would flag, and the FDA classes it as a
+   *Penicillin-class Antibacterial*.
+7. **Handoff** — someone who wasn't there gets five panels instead of a transcript, with the
+   still-unowned anticoagulation question leading the unresolved list.
+
+**On the drug pairing:** ampicillin-sulbactam is a genuine guideline choice for a contaminated
+open fracture, which is what makes the conflict real rather than contrived. The earlier
+amoxicillin → vancomycin example was not — amoxicillin isn't what you'd reach for here, and a
+clinician in the audience would notice.

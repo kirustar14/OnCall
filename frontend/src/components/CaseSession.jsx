@@ -1,5 +1,7 @@
 import { useCaseSocket } from '../hooks/useCaseSocket';
 import VideoPreview from './VideoPreview';
+import Ledger from './Ledger';
+import HandoffPanel from './HandoffPanel';
 
 function StatusBadge({ status }) {
   const label = {
@@ -30,7 +32,20 @@ function StructuredList({ title, items, render }) {
 }
 
 export default function CaseSession({ caseId, active }) {
-  const { status, transcript, interim, structured, alerts, videoStream, endCase } = useCaseSocket(caseId);
+  const {
+    status,
+    transcript,
+    interim,
+    structured,
+    alerts,
+    videoStream,
+    unownedPrompt,
+    handoffBrief,
+    handoffLoading,
+    endCase,
+    requestHandoff,
+    dismissHandoff,
+  } = useCaseSocket(caseId);
 
   return (
     <div className={`case-session ${active ? '' : 'hidden'} ${status === 'closed' ? 'case-closed' : ''}`}>
@@ -44,11 +59,24 @@ export default function CaseSession({ caseId, active }) {
         </div>
       )}
 
+      {unownedPrompt && (
+        <div className="unowned-banner">
+          <span className="unowned-mark">◎</span>
+          <span className="unowned-text">{unownedPrompt.text}</span>
+          <span className="unowned-note">spoken to the room</span>
+        </div>
+      )}
+
+      {handoffBrief && <HandoffPanel brief={handoffBrief} onClose={dismissHandoff} />}
+
       <div className="case-session-grid">
         <div className="video-column">
           <VideoPreview stream={videoStream} />
           <div className="case-controls">
             <StatusBadge status={status} />
+            <button className="handoff-btn" onClick={requestHandoff} disabled={handoffLoading}>
+              {handoffLoading ? 'Briefing…' : 'Handoff'}
+            </button>
             {status !== 'closed' && (
               <button className="end-case-btn" onClick={endCase}>
                 End Case
@@ -64,6 +92,8 @@ export default function CaseSession({ caseId, active }) {
             {interim && <span className="interim"> {interim}</span>}
             {!transcript && !interim && <span className="muted">Listening…</span>}
           </div>
+
+          <Ledger work={structured.work} />
         </div>
 
         <div className="structured-column">

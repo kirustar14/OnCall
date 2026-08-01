@@ -16,3 +16,7 @@ frontend/.env
 # OS
 .DS_Store
 .gstack/
+
+# Runtime state snapshot
+.servare-state.json
+*.tmp
