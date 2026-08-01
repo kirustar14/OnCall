@@ -1,0 +1,404 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════
+  SLIDE PATTERNS — a source library, not a page to render.
+  Copy the CSS into the template's <style>, the markup into a <section class="s">,
+  and the JS into fire(). Every pattern assumes the template's tokens.
+
+  Choose by what the slide is DOING:
+    orientation ..... 1 title · 2 statement · 3 divider
+    showing what is . 4 filmstrip · 5 device frame · 6 live prototype
+    showing detail .. 7 zoom · 8 anatomy · 9 instrument row
+    showing change .. 10 before/after · 11 wipe slider · 12 object promotion · 13 failure loop
+    showing structure 14 matrix · 15 diagram · 16 motion spec
+    closing ......... 17 artifact grid
+  ══════════════════════════════════════════════════════════════════════════
+-->
+
+<!-- ═════════ 1 · TITLE ═════════ in the template. Motif + headline + credit. -->
+
+<!-- ═════════ 2 · STATEMENT ═════════
+     No artifact. This is the exception that earns its keep by being rare — ≤4 per deck.
+     Reserve for the reframe, the rule, the closing line. -->
+<section class="s center">
+  <h2 class="t-big" data-b style="max-width:21ch">We weren't setting a dial.</h2>
+  <h2 class="t-big grad" data-b style="max-width:21ch;margin-top:14px">We were choosing which steps it owns.</h2>
+</section>
+
+<!-- ═════════ 3 · SECTION DIVIDER ═════════ a beat of silence. No bullets. -->
+<section class="s center">
+  <p class="lbl" data-b data-fx="fade" style="margin-bottom:48px">Then the hard part</p>
+  <h2 class="t-mega" data-b style="font-size:132px">Three decisions</h2>
+</section>
+
+
+<!-- ═════════ 4 · FILMSTRIP ═════════
+     N screens as miniatures; some grey out. The elimination is the information —
+     stagger it ~280ms so the audience counts them individually. -->
+<style>
+.strip{display:grid;grid-template-columns:repeat(6,1fr);gap:20px;width:100%;align-items:center}
+.fs{position:relative;transition:opacity 700ms var(--e-emph),filter 700ms var(--e-emph),
+  transform 600ms var(--spring-def)}
+.fs .mini{background:#fff;color:var(--p-on);border-radius:12px;overflow:hidden;height:352px;
+  box-shadow:0 16px 44px rgba(0,0,0,.55);display:flex;flex-direction:column}
+.fs cap{display:block;text-align:center;font-size:17px;color:var(--ink-3);margin-top:16px}
+.fs.out{opacity:.2;filter:grayscale(1) blur(1px)}
+.fs.out cap{text-decoration:line-through}
+.fs.keep{transform:scale(1.05)}                 /* the survivor grows */
+.fs.keep cap{color:#8ad6a8}
+.fs .xmark{position:absolute;left:50%;top:158px;transform:translate(-50%,-50%) scale(.4);
+  opacity:0;font-size:52px;color:#ff4641;transition:all 500ms var(--spring-def)}
+.fs.out .xmark{opacity:.9;transform:translate(-50%,-50%) scale(1)}
+/* miniature primitives — build recognisable screens, not literal ones */
+.m-bar{height:22px;background:#f1f3f4;display:flex;align-items:center;padding:0 8px;gap:4px;flex-shrink:0}
+.m-bar i{width:8px;height:8px;border-radius:2px;background:#4285f4;display:block}
+.m-body{flex:1;padding:14px 12px;display:flex;flex-direction:column;gap:8px}
+.m-t{height:9px;border-radius:5px;background:#dadce0;width:62%;margin:4px auto 10px}
+.m-c{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.m-c i{display:block;height:86px;border-radius:7px;background:#f1f3f4}
+.m-c i.sel{background:#e6f4ea;box-shadow:inset 0 0 0 2px #137333}
+.m-l{height:7px;border-radius:4px;background:#e8eaed}
+.m-btn{height:20px;border-radius:10px;background:#137333;width:64%;margin:auto auto 0}
+</style>
+<div class="canvas"><div class="strip">
+  <div class="fs" data-role="keep"><div class="mini">
+    <div class="m-bar"><i></i><i></i><i></i></div>
+    <div class="m-body"><div class="m-t"></div><div class="m-l"></div><div class="m-btn"></div></div>
+  </div><span class="xmark">✕</span><cap>Address</cap></div>
+  <div class="fs" data-role="out"><div class="mini">
+    <div class="m-bar"><i></i><i></i><i></i></div>
+    <div class="m-body"><div class="m-t"></div><div class="m-c"><i class="sel"></i><i></i><i></i></div><div class="m-btn"></div></div>
+  </div><span class="xmark">✕</span><cap>Eligibility</cap></div>
+  <!-- …more… -->
+</div></div>
+<script>
+/* in fire(): */
+if(S.querySelector('.strip')){
+  const fs=[...S.querySelectorAll('.fs')];
+  fs.forEach(f=>f.classList.remove('out','keep'));
+  (async()=>{ await wait(2000); if(id!==tok)return;
+    for(const f of fs){ if(id!==tok)return;
+      if(f.dataset.role==='out') f.classList.add('out');
+      await wait(280); }
+    await wait(400); if(id!==tok)return;
+    fs[2].classList.add('keep');
+  })();
+}
+</script>
+
+
+<!-- ═════════ 5 · DEVICE FRAME ═════════
+     One screen at full size. Recreate in HTML — it stays crisp, animates, annotates.
+     Fix the body height so the frame doesn't jump as content changes. -->
+<style>
+.device{background:var(--p-surface);border-radius:26px;overflow:hidden;color:var(--p-on);height:860px;
+  box-shadow:0 40px 120px rgba(0,0,0,.66),0 0 0 1px rgba(255,255,255,.08)}
+.dev-bar{display:flex;align-items:center;gap:14px;padding:17px 26px;border-bottom:1px solid #e1e3e1}
+.dev-body{display:grid;grid-template-columns:minmax(0,1fr) 400px;height:723px}
+.dev-main{padding:34px;border-right:1px solid #e1e3e1;overflow:hidden}
+.dev-side{padding:22px;background:var(--p-container);display:flex;flex-direction:column;
+  overflow:hidden;min-height:0}
+</style>
+
+
+<!-- ═════════ 6 · LIVE PROTOTYPE ═════════
+     A device frame that plays on entry. Usually the peak of the deck.
+     Keep under ~15s. Give it a replay control. Narrate over it, not before it. -->
+<style>
+#replay{margin-left:auto;font-family:var(--mono);font-size:14px;letter-spacing:.14em;
+  text-transform:uppercase;background:none;border:1px solid var(--hair-2);color:var(--ink-3);
+  padding:9px 18px;border-radius:999px;cursor:pointer;transition:all 300ms var(--e-emph)}
+#replay:hover{color:var(--ink);border-color:var(--ink-3)}
+/* streaming text: de-blur is what makes it read as generated rather than typed */
+.tok{opacity:0;display:inline!important;filter:blur(3px)}
+.tok.in{opacity:1;filter:blur(0);transition:opacity 260ms var(--e-std-dec),filter 300ms var(--e-std-dec)}
+/* working state: narrow band, diagonal, with a rest — a continuous sweep reads frantic */
+.shim{position:relative;overflow:hidden;isolation:isolate;border-radius:10px}
+.shim::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(-65deg,transparent 40%,rgba(255,255,255,.92) 50%,transparent 60%);
+  background-size:400% 400%;animation:sweep 2s linear infinite;mix-blend-mode:overlay}
+@keyframes sweep{0%{background-position:100% 100%}70%,100%{background-position:0 0}}
+.caret{display:inline-block;width:2px;height:19px;background:var(--p-on);vertical-align:-3px;
+  animation:blink 1.1s steps(1) infinite}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+</style>
+<script>
+/* type into a field, character by character, then "send" */
+async function typeInto(el,text,id){
+  let acc='';
+  for(const ch of text){ if(id!==tok)return;
+    acc+=ch; el.innerHTML=acc+'<span class="caret"></span>';
+    await wait(ch===' '?26:15+Math.random()*26); }
+}
+/* stream a response token by token — 18ms stagger, preserves inline markup */
+async function stream(html,node,id){
+  node.innerHTML='<span></span>';
+  const host=node.firstChild, tmp=document.createElement('div'); tmp.innerHTML=html;
+  const parts=[];
+  (function walk(src,dst){ src.childNodes.forEach(n=>{
+    if(n.nodeType===3){ n.textContent.split(/(\s+)/).forEach(w=>{ if(!w)return;
+      const s=document.createElement('span'); s.className='tok'; s.textContent=w;
+      dst.appendChild(s); parts.push(s); }); }
+    else { const c=n.cloneNode(false); dst.appendChild(c); walk(n,c); } }); })(tmp,host);
+  for(const p of parts){ if(id!==tok)return; p.classList.add('in'); await wait(18); }
+}
+/* NOTE: if the bubble's wrapper has `display:block` on a descendant selector,
+   scope it to `> span` or the token spans inherit it and every word takes a line. */
+</script>
+
+
+<!-- ═════════ 7 · ZOOM DETAIL ═════════
+     UI magnified 3–4×, annotated. Anchor markers to real elements, and never
+     cover the pixel you're pointing at — numbered dots + a legend beat floating labels. -->
+<style>
+.zoom{display:grid;grid-template-columns:1fr 1fr;gap:70px;width:100%;align-items:center}
+.zcard{background:#fff;color:var(--p-on);border-radius:22px;padding:34px;position:relative;
+  box-shadow:0 40px 110px rgba(0,0,0,.6)}
+.zcard.hit{box-shadow:0 40px 110px rgba(0,0,0,.6),0 0 0 5px var(--accent),0 0 70px rgba(49,134,255,.4)}
+.zann{position:absolute;font-family:var(--mono);font-size:16px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink);display:flex;align-items:center;gap:12px;white-space:nowrap}
+.zann::before{content:"";width:44px;height:1px;background:var(--hair-2)}
+.zlegend{display:flex;gap:52px;justify-content:center;margin-top:52px;font-size:22px;color:var(--ink-2)}
+.zlegend b{color:var(--ink);font-weight:600}
+</style>
+<script>
+/* anchoring markers to real elements so they survive a font swap or reflow */
+function placeMarkers(stage,items){          /* items: [{sel:'#el',n:1,corner:'tr'}] */
+  stage.querySelectorAll('.pin').forEach(e=>e.remove());
+  const sb=stage.getBoundingClientRect();
+  items.forEach(it=>{
+    const el=stage.querySelector(it.sel); if(!el)return;
+    const b=el.getBoundingClientRect();
+    let x=b.left-sb.left, y=b.top-sb.top;
+    if(it.corner.includes('r'))x+=b.width;
+    if(it.corner.includes('b'))y+=b.height;
+    const pin=document.createElement('div');
+    pin.className='pin'; pin.textContent=it.n;
+    pin.style.cssText=`position:absolute;left:${x}px;top:${y}px;transform:translate(-50%,-50%)`;
+    stage.appendChild(pin);
+  });
+}
+</script>
+
+
+<!-- ═════════ 8 · ANATOMY ═════════ one artifact, parts labelled around it.
+     Use when the STRUCTURE of a component is the argument. Reuse .zann for leaders. -->
+
+
+<!-- ═════════ 9 · INSTRUMENT ROW ═════════
+     The upgrade path for any slide you were about to build as a table.
+     N variants as REAL WORKING UI, side by side, each captioned. -->
+<style>
+.ladv{display:grid;grid-template-columns:repeat(5,1fr);gap:20px;width:100%;align-items:center}
+.lv{display:flex;flex-direction:column;gap:16px}
+.lv-tag{font-family:var(--mono);font-size:14px;letter-spacing:.12em;font-weight:600;text-align:center}
+.lv-ui{background:#fff;color:var(--p-on);border-radius:14px;height:250px;padding:14px;
+  position:relative;overflow:hidden;display:flex;flex-direction:column;
+  box-shadow:0 16px 46px rgba(0,0,0,.5)}
+.lv-cap{text-align:center;font-size:19px;letter-spacing:-.015em;font-weight:500}
+.lv-cap span{display:block;font-size:16px;color:var(--ink-3);margin-top:5px;font-weight:400}
+</style>
+
+
+<!-- ═════════ 10 · BEFORE → AFTER ═════════ the most legible comparison form.
+     Call out the specific deltas underneath; the arrow alone under-explains. -->
+<style>
+.ba2{display:grid;grid-template-columns:1fr 90px 1fr;align-items:center;width:100%}
+.ba2 .arrow{text-align:center;font-size:44px;color:var(--ink-3)}
+</style>
+
+
+<!-- ═════════ 11 · WIPE SLIDER ═════════
+     Only works if both layers share a geometric skeleton — same header height, same
+     grid, same footer. Otherwise the halves don't register and it reads as noise. -->
+<style>
+.ba{position:relative;border-radius:12px;overflow:hidden;user-select:none;background:#fff}
+.ba-layer{position:absolute;inset:0}.ba-layer.after{z-index:2}
+.ba-spacer{visibility:hidden}                       /* one copy sets the height */
+.ba-handle{position:absolute;top:0;bottom:0;width:2px;background:var(--ink);z-index:10;cursor:ew-resize}
+.ba-handle::before{content:"";position:absolute;left:-19px;top:50%;width:40px;height:40px;
+  transform:translateY(-50%);border-radius:50%;background:var(--ink)}
+</style>
+<script>
+function mountSlider(ba){
+  const a=ba.querySelector('.after'),h=ba.querySelector('.ba-handle');
+  const set=p=>{p=Math.max(2,Math.min(98,p));a.style.clipPath=`inset(0 0 0 ${p}%)`;h.style.left=p+'%'};
+  set(50); let drag=false;
+  const move=e=>{ if(!drag)return; const r=ba.getBoundingClientRect();
+    set(((e.touches?e.touches[0].clientX:e.clientX)-r.left)/r.width*100); e.preventDefault(); };
+  ba.addEventListener('mousedown',e=>{drag=true;move(e)});
+  addEventListener('mousemove',move); addEventListener('mouseup',()=>drag=false);
+}
+</script>
+
+
+<!-- ═════════ 12 · OBJECT PROMOTION ═════════
+     An element physically flies from A to B. When the argument is "this was in the
+     wrong place," the motion IS the claim. Slower than app motion — ~1.1s. -->
+<style>
+.flyer{position:absolute;background:#fff;color:var(--p-on);border-radius:10px;padding:10px 14px;
+  font-size:22px;font-weight:620;box-shadow:0 18px 50px rgba(0,0,0,.5);opacity:0;z-index:5}
+.lift{background:rgba(255,204,0,.12);color:#ffd76a;border-radius:5px;padding:1px 4px;
+  transition:opacity 900ms var(--e-emph)}
+</style>
+<script>
+/* in fire() — remember to divide by the stage scale */
+if(S.id==='promoSlide'){
+  const fly=S.querySelector('.flyer'),src=S.querySelector('.lift'),
+        dst=S.querySelector('.landing'),land=S.querySelector('.landText'),
+        wrap=S.querySelector('.canvas > div');
+  fly.style.transition='none'; fly.style.opacity=0; land.style.opacity=0; src.style.opacity=1;
+  (async()=>{ await wait(1700); if(id!==tok)return;
+    const a=src.getBoundingClientRect(), b=dst.getBoundingClientRect(),
+          p=wrap.getBoundingClientRect(), sc=deckScale();
+    fly.style.left=((a.left-p.left)/sc)+'px'; fly.style.top=((a.top-p.top)/sc)+'px';
+    fly.style.opacity=1;
+    await wait(60); if(id!==tok)return;
+    src.style.opacity='.18';
+    fly.style.transition='all 1100ms var(--e-emph)';
+    fly.style.left=((b.left-p.left)/sc+8)+'px'; fly.style.top=((b.top-p.top)/sc+14)+'px';
+    await wait(1150); if(id!==tok)return;
+    fly.style.transition='opacity 300ms'; fly.style.opacity=0;
+    land.style.transition='opacity 400ms var(--e-std-dec)'; land.style.opacity=1;
+  })();
+}
+</script>
+
+
+<!-- ═════════ 13 · FAILURE LOOP ═════════
+     An animated wrong state on a loop. More persuasive than describing it, and a loop
+     lets you talk over it for as long as you need. Gate on visibility. -->
+<style>
+.tapcount{position:absolute;right:22px;bottom:20px;font-family:var(--mono);font-size:26px;
+  color:#ff8f8a;font-weight:600}
+.mini-acts b.tap{animation:tapPulse 340ms var(--spring-fast)}
+@keyframes tapPulse{0%{transform:scale(1)}45%{transform:scale(.9)}100%{transform:scale(1)}}
+/* "attention was elsewhere" — an inverted spotlight drifting away from the thing */
+.eyeline{position:absolute;width:120px;height:120px;border-radius:50%;pointer-events:none;
+  box-shadow:0 0 0 9999px rgba(255,255,255,.72);transition:all 1400ms var(--e-emph)}
+</style>
+<script>
+setInterval(()=>{
+  const btn=document.getElementById('confirmBtn'),c=document.getElementById('count');
+  if(!btn||!btn.closest('.s').classList.contains('on'))return;   /* the visibility gate */
+  btn.classList.add('tap'); setTimeout(()=>btn.classList.remove('tap'),360);
+  const n=(+c.textContent.slice(1))%11+1; c.textContent='×'+n;
+  c.style.opacity=Math.min(1,.4+n*.06);                          /* it accumulates */
+},900);
+</script>
+
+
+<!-- ═════════ 14 · MATRIX ═════════ built cell by cell, decisive row last.
+     Keep to 4×4 or smaller — beyond that it's a table and belongs in a document. -->
+<style>
+.dg{display:grid;grid-template-columns:270px repeat(4,1fr);gap:11px;align-items:center}
+.dgh{font-family:var(--mono);font-size:15px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink-3);text-align:center;padding-bottom:6px}
+.dgl{text-align:right;padding-right:18px;font-size:27px;letter-spacing:-.02em;font-weight:500;line-height:1.2}
+.dgl span{display:block;font-size:17px;color:var(--ink-3);font-weight:400;margin-top:4px}
+.dgl.hot{color:#8ad6a8}
+.dgc{border-radius:12px;padding:19px 10px;text-align:center;font-size:21px;font-weight:500}
+.dgc.a{background:linear-gradient(135deg,rgba(66,133,244,.92),rgba(76,141,246,.82));color:#fff}
+.dgc.u{background:rgba(14,188,95,.14);color:#8ad6a8;box-shadow:inset 0 0 0 1px rgba(14,188,95,.4)}
+.dgc.c{background:rgba(244,242,247,.05);color:var(--ink-3);box-shadow:inset 0 0 0 1px var(--hair)}
+.dgc.c.bad{background:rgba(255,70,65,.13);color:#ff8f8a;box-shadow:inset 0 0 0 1px rgba(255,70,65,.42)}
+</style>
+<!-- each cell carries data-b data-fx="scale" so the matrix assembles itself -->
+
+
+<!-- ═════════ 15 · DIAGRAM ═════════ nodes and links, animated. SVG or HTML, never
+     an exported image. A value drifting red says "they diverge" better than a caption. -->
+<style>
+.sotnode{width:150px;height:110px;background:#fff;color:var(--p-on);border-radius:12px;
+  display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:600;
+  box-shadow:0 14px 40px rgba(0,0,0,.45);position:relative}
+.sotnode small{position:absolute;bottom:-30px;left:0;right:0;text-align:center;font-size:16px;
+  color:var(--ink-3);font-weight:400}
+.sotnode.drift{animation:drift 3200ms var(--e-emph) infinite alternate}
+@keyframes drift{to{color:#d93025}}
+.sotlink.broken{width:70px;height:2px;
+  background:repeating-linear-gradient(90deg,#ff4641 0 6px,transparent 6px 12px)}
+</style>
+
+
+<!-- ═════════ 16 · MOTION SPEC ═════════
+     The best way to PROVE motion craft rather than assert it: the curve drawn with a
+     dot traversing it, the token values, and two loops at the same duration so the
+     difference between easings is felt. -->
+<style>
+.mspec{display:grid;grid-template-columns:1fr 1fr;gap:80px;width:100%;align-items:start}
+.curve{background:rgba(244,242,247,.035);border-radius:22px;padding:34px;
+  box-shadow:inset 0 0 0 1px var(--hair)}
+.mtok{display:grid;grid-template-columns:auto 1fr;gap:14px 26px;font-family:var(--mono);
+  font-size:18px;margin-top:30px}
+.mtok dt{color:var(--ink-3);letter-spacing:.08em} .mtok dd{margin:0;color:var(--ink)}
+.mstage{position:relative;height:470px;background:rgba(244,242,247,.035);border-radius:22px;
+  box-shadow:inset 0 0 0 1px var(--hair);display:flex;align-items:center;justify-content:center;gap:26px}
+.mchip{background:#fff;color:var(--p-on);border-radius:14px;padding:18px 22px;font-size:20px;
+  font-weight:600;box-shadow:0 14px 40px rgba(0,0,0,.45)}
+@keyframes springIn{0%{transform:translateY(14px) scale(.9);opacity:0}100%{transform:none;opacity:1}}
+.demoA{animation:springIn 500ms var(--spring-def) infinite alternate}
+.demoB{animation:springIn 500ms linear infinite alternate}
+</style>
+<div class="canvas"><div class="mspec">
+  <div class="curve">
+    <svg viewBox="0 0 320 220">
+      <linearGradient id="cg" x1="0" y1="220" x2="320" y2="0" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="var(--g1)"/><stop offset="1" stop-color="var(--g3)"/></linearGradient>
+      <g stroke="rgba(244,242,247,.12)"><line x1="20" y1="30" x2="300" y2="30"/>
+        <line x1="20" y1="180" x2="300" y2="180"/><line x1="20" y1="30" x2="20" y2="200"/></g>
+      <!-- the path overshoots above y=30, which is the 1.0 line — that IS the spring -->
+      <path d="M20 180 C 141 -21, 90 30, 300 30" fill="none" stroke="url(#cg)" stroke-width="3" stroke-linecap="round"/>
+      <circle r="6" fill="#fff"><animateMotion dur="1.6s" repeatCount="indefinite"
+        path="M20 180 C 141 -21, 90 30, 300 30"/></circle>
+    </svg>
+    <dl class="mtok">
+      <dt>token</dt><dd>md.sys.motion · spatial default</dd>
+      <dt>spring</dt><dd>ζ 0.8 · k 380</dd>
+      <dt>css</dt><dd>cubic-bezier(.38,1.21,.22,1)</dd>
+      <dt>overshoot</dt><dd>≈ 1.5%</dd>
+    </dl>
+  </div>
+  <div class="mstage">
+    <div class="mchip demoA" style="background:var(--accent);color:#fff">spatial</div>
+    <div class="mchip demoB">linear</div>
+  </div>
+</div></div>
+
+
+<!-- ═════════ 17 · ARTIFACT GRID ═════════ for impact. Objects, not bullets —
+     miniatures of the things you made, because the artifacts are what travelled. -->
+<style>
+.arts{display:grid;grid-template-columns:repeat(3,1fr);gap:34px;width:100%}
+.art{background:rgba(244,242,247,.04);border-radius:22px;padding:30px;
+  box-shadow:inset 0 0 0 1px var(--hair);display:flex;flex-direction:column;gap:20px}
+.artvis{height:190px;border-radius:14px;background:#fff;color:var(--p-on);padding:14px;
+  overflow:hidden;position:relative;box-shadow:0 14px 40px rgba(0,0,0,.4)}
+.art b{font-size:26px;letter-spacing:-.02em;font-weight:520;line-height:1.25}
+.art span{font-size:19px;color:var(--ink-3);line-height:1.45}
+</style>
+
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════
+  RECURRING GOTCHAS — all of these cost real debugging time:
+
+  · Class collisions with the slide selector. `document.querySelectorAll('.s')`
+    also matches `<div class="mini-line s">`. Namespace your utility classes.
+
+  · `data-fx="scale"` needs `opacity:1` on its own `.in` rule, or the later,
+    equal-specificity `opacity:0` wins and the element never appears.
+
+  · A descendant selector like `.bubble span{display:block}` will hit the token
+    spans inside it. Scope to `> span`.
+
+  · Recreated UI inherits the stage's near-white `--ink`. Set an explicit
+    `color:var(--p-on)` on every white surface or the text is invisible.
+
+  · A grid item wider than its track can align to start instead of centre.
+    Position the stage absolutely and translate it rather than relying on
+    `place-items:center`.
+
+  · Variable-font `font-variation-settings` do nothing if the webfont fails.
+    Always pair with a plain `font-weight`.
+  ══════════════════════════════════════════════════════════════════════════
+-->

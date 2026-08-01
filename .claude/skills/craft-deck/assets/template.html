@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DECK TITLE — PRESENTER</title>
+
+<!-- Pick a display family with real character. Keep a system fallback so the deck
+     survives being presented offline. Avoid Inter/Roboto/Arial as the DISPLAY face. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wdth,wght@6..144,25..151,1..1000&family=Google+Sans+Code:wght@400..600&display=swap" rel="stylesheet">
+
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   THE SYSTEM — declare it here, before any pixel is placed.
+   Fill this in for your project. Consistency comes from a declared
+   system, not from restraint in the moment.
+
+     Canvas    ......  (dark stage / light editorial / sandwich)
+     Type      ......  one family; four sizes; weight+width for hierarchy
+     Motif     ......  ONE element from the subject, repeated
+     Colour    ......  one dominant, one accent; product tokens kept separate
+     Motion    ......  Material 3 easing + M3 Expressive springs
+   ══════════════════════════════════════════════════════════════════════ */
+:root{
+  /* ── BRAND · replace with the real tokens of the thing you're presenting ── */
+  --g1:#4285f4; --g2:#9b72cb; --g3:#d96570;     /* signature gradient */
+  --accent:#3186ff;                              /* the one accent */
+
+  /* ── STAGE · the deck's own surface (NOT the product's) ── */
+  --ink:#f4f2f7; --ink-2:rgba(244,242,247,.62); --ink-3:rgba(244,242,247,.38);
+  --bg:#070609; --hair:rgba(244,242,247,.10); --hair-2:rgba(244,242,247,.18);
+
+  /* ── PRODUCT SURFACE · for recreated UI. Lift these verbatim from source. ── */
+  --p-surface:#fff; --p-container:#f0f4f9; --p-on:#1f1f1f;
+  --p-on-var:#444746; --p-outline:#c4c7c5; --p-accent:#0b57d0;
+
+  /* ── MOTION · Material 3 tokens. Linear is for indeterminate progress only. ── */
+  --e-emph:cubic-bezier(.2,0,0,1);
+  --e-emph-dec:cubic-bezier(.05,.7,.1,1);
+  --e-emph-acc:cubic-bezier(.3,0,.8,.15);
+  --e-std-dec:cubic-bezier(0,0,0,1);
+  --e-std-acc:cubic-bezier(.3,0,1,1);
+  --spring-fast:cubic-bezier(.42,1.67,.21,.90);
+  --spring-def:cubic-bezier(.38,1.21,.22,1.00);
+
+  --sans:"Google Sans Flex",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --mono:"Google Sans Code",ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#000;overflow:hidden;
+  font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+
+/* ══ fixed 16:9 stage — never responsive reflow ══ */
+#viewport{position:fixed;inset:0;background:#000;overflow:hidden}
+#deck{width:1920px;height:1080px;position:absolute;left:50%;top:50%;
+  transform-origin:center center;background:var(--bg);overflow:hidden}
+
+/* ambient field — a flat fill bands on projectors and reads unfinished */
+#aura{position:absolute;inset:-20%;z-index:0;pointer-events:none;opacity:.85}
+#aura b{position:absolute;display:block;border-radius:50%;filter:blur(160px);opacity:.30;will-change:transform}
+#aura b:nth-child(1){width:900px;height:900px;left:-6%;top:-12%;background:var(--g1);animation:d1 34s ease-in-out infinite}
+#aura b:nth-child(2){width:820px;height:820px;right:-4%;top:8%;background:var(--g2);animation:d2 41s ease-in-out infinite}
+#aura b:nth-child(3){width:760px;height:760px;left:26%;bottom:-22%;background:var(--g3);opacity:.20;animation:d3 47s ease-in-out infinite}
+@keyframes d1{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(90px,60px,0) scale(1.12)}}
+@keyframes d2{0%,100%{transform:translate3d(0,0,0) scale(1.05)}50%{transform:translate3d(-70px,90px,0) scale(.94)}}
+@keyframes d3{0%,100%{transform:translate3d(0,0,0) scale(.96)}50%{transform:translate3d(60px,-70px,0) scale(1.1)}}
+#grain{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:.032;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* ══ slides — fade-through: out accelerates, in decelerates ══ */
+.s{position:absolute;inset:0;z-index:2;padding:76px 110px;display:flex;flex-direction:column;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity 200ms var(--e-std-acc),visibility 0s 200ms}
+.s.on{opacity:1;visibility:visible;pointer-events:auto;
+  transition:opacity 300ms 120ms var(--e-std-dec),visibility 0s}
+.s.center{justify-content:center;align-items:center;text-align:center}
+.s.mid{justify-content:flex-start}
+
+/* ══ type — FOUR sizes. Note the font-weight fallbacks: variable-font
+      settings silently do nothing if the webfont fails to load. ══ */
+.t-mega{font-size:158px;line-height:.92;letter-spacing:-.05em;font-weight:300;
+  font-variation-settings:"wght" 280,"wdth" 100,"opsz" 144;margin:0}
+.t-big{font-size:104px;line-height:1.02;letter-spacing:-.042em;font-weight:300;
+  font-variation-settings:"wght" 300,"wdth" 100,"opsz" 120;margin:0}
+.t-mid{font-size:64px;line-height:1.1;letter-spacing:-.032em;font-weight:350;
+  font-variation-settings:"wght" 350,"wdth" 100,"opsz" 80;margin:0}
+.t-sm{font-size:34px;line-height:1.4;letter-spacing:-.014em;font-weight:400;
+  font-variation-settings:"wght" 380,"wdth" 96;margin:0;color:var(--ink-2)}
+.lbl{font-family:var(--mono);font-size:17px;letter-spacing:.26em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:500;margin:0}
+strong{font-weight:600;font-variation-settings:"wght" 620}
+.grad{background:linear-gradient(96deg,var(--g1) 0%,var(--g2) 52%,var(--g3) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* ══ THE SLIDE GRAMMAR — header + canvas. Nothing else. ══ */
+.shead{margin-bottom:34px;flex-shrink:0}
+.shead .lbl{margin-bottom:14px}
+.shead h2{font-size:56px;line-height:1.06;letter-spacing:-.035em;font-weight:300;
+  font-variation-settings:"wght" 300,"wdth" 100,"opsz" 60;margin:0;max-width:26ch}
+.shead .ctx{font-size:24px;line-height:1.45;color:var(--ink-3);margin:14px 0 0;max-width:52ch}
+.canvas{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;position:relative}
+
+/* ══ builds — auto-played on entry, staggered. Presenter advances SLIDES. ══ */
+[data-b]{opacity:0;transform:translateY(26px);
+  transition:opacity 400ms var(--e-std-dec),transform 500ms var(--e-emph-dec)}
+[data-b].in{opacity:1;transform:none}
+[data-b][data-fx="fade"]{transform:none}
+[data-b][data-fx="left"]{transform:translateX(-34px)}
+[data-b][data-fx="right"]{transform:translateX(34px)}
+[data-b][data-fx="scale"]{transform:scale(.9);
+  transition:opacity 300ms var(--e-std-dec),transform 500ms var(--spring-def)}
+[data-b][data-fx="scale"].in{transform:scale(1);opacity:1}
+
+/* ══ chrome ══ */
+#chrome{position:absolute;left:0;right:0;bottom:0;z-index:40;pointer-events:none;
+  padding:0 110px 40px;display:flex;align-items:flex-end;gap:24px}
+#dots{display:flex;gap:7px;pointer-events:auto}
+#dots i{width:7px;height:7px;border-radius:50%;background:rgba(244,242,247,.16);display:block;
+  cursor:pointer;transition:all 280ms var(--e-emph)}
+#dots i.on{background:var(--accent);width:26px;border-radius:4px}
+#dots i.seen{background:rgba(244,242,247,.34)}
+#meta{margin-left:auto;font-family:var(--mono);font-size:14px;letter-spacing:.2em;
+  color:var(--ink-3);text-transform:uppercase}
+#bar{position:absolute;left:0;top:0;height:2px;z-index:41;
+  background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3));transition:width 420ms var(--e-emph)}
+#hint{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:60;
+  font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(255,255,255,.30);transition:opacity 500ms;pointer-events:none}
+#hint.gone{opacity:0}
+
+/* ══ inline notes drawer — rehearsal only; the audience can see this ══ */
+#notes{position:fixed;left:0;right:0;bottom:0;z-index:90;background:rgba(8,7,11,.97);
+  backdrop-filter:blur(20px);border-top:1px solid var(--hair-2);padding:26px 44px 30px;
+  transform:translateY(100%);transition:transform 380ms var(--e-emph);max-height:46vh;overflow-y:auto}
+#notes.on{transform:none}
+#notes h4{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 12px;font-weight:500}
+#notes p{margin:0 0 12px;font-size:16px;line-height:1.62;color:var(--ink-2);max-width:110ch}
+#notes strong{color:var(--ink)}
+#notes .beat{color:var(--accent);font-weight:600}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important}
+}
+</style>
+</head>
+<body>
+<div id="viewport"><div id="deck">
+  <div id="aura"><b></b><b></b><b></b></div>
+  <div id="grain"></div>
+  <div id="bar"></div>
+
+  <!-- ════════════════ SLIDES ════════════════
+       Grammar: .shead (label + action title + optional 1-line context)
+                .canvas (THE ARTIFACT — this is the slide)
+       Copy patterns from slide-patterns.html. Delete these three. -->
+
+  <!-- 01 · title -->
+  <section class="s center">
+    <div data-b style="margin-bottom:54px">
+      <!-- MOTIF: a real element from the subject, not a shape you invented -->
+      <svg width="96" height="96" viewBox="0 0 24 24">
+        <linearGradient id="mg" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="var(--g1)"/><stop offset=".52" stop-color="var(--g2)"/>
+          <stop offset="1" stop-color="var(--g3)"/></linearGradient>
+        <path d="M12 0A12 12 0 0 0 24 12A12 12 0 0 0 12 24A12 12 0 0 0 0 12A12 12 0 0 0 12 0Z" fill="url(#mg)"/>
+      </svg></div>
+    <h1 class="t-mega" data-b>Your headline<br>sentence</h1>
+    <p class="lbl" data-b data-fx="fade" style="margin-top:70px">Name · Context · Year</p>
+  </section>
+
+  <!-- 02 · content — header + artifact -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">Where we are</p>
+      <h2>An action title that states the takeaway.</h2>
+      <p class="ctx">Optional. Only if the artifact needs a caption to be legible.</p>
+    </div>
+    <div class="canvas">
+      <!-- THE ARTIFACT GOES HERE. If this is empty, the slide is a thought, not a slide. -->
+    </div>
+  </section>
+
+  <!-- 03 · statement — no artifact. Use ≤4 times in a deck. -->
+  <section class="s center">
+    <h2 class="t-big" data-b style="max-width:20ch">The one line you want them to repeat.</h2>
+  </section>
+
+  <div id="chrome"><div id="dots"></div><div id="meta"></div></div>
+</div></div>
+
+<div id="notes"><h4>Speaker notes</h4><div id="notesBody"></div></div>
+<div id="hint">← → &nbsp;·&nbsp; N notes &nbsp;·&nbsp; S speaker view &nbsp;·&nbsp; F fullscreen</div>
+
+<script>
+/* ══════════ SPEAKER NOTES — one entry per slide, in order ══════════
+   This is where the talk lives. Beat markers in <span class="beat">,
+   the sentence you want to land in <strong>. See references/speaker-notes.md */
+const NOTES = [
+`<p><span class="beat">Open cold.</span> "Your opening line, in the voice you'll actually use."</p>
+<p>What not to do yet.</p>`,
+
+`<p>What this slide is really about.</p>
+<p><span class="beat">Point at the thing.</span> <strong>The sentence you want to land.</strong></p>`,
+
+`<p><span class="beat">Read it, then stop talking.</span></p>`
+];
+
+/* ══════════ nav ══════════ */
+const slides=[...document.querySelectorAll('.s')];
+const dots=document.getElementById('dots'),bar=document.getElementById('bar'),
+      meta=document.getElementById('meta'),notesEl=document.getElementById('notes'),
+      notesBody=document.getElementById('notesBody'),hint=document.getElementById('hint');
+let cur=-1;
+dots.innerHTML=slides.map((_,i)=>`<i data-i="${i}"></i>`).join('');
+const dotEls=[...dots.children];
+const buildsOf=i=>slides[i]?[...slides[i].querySelectorAll('[data-b]')]:[];
+
+function goto(i){
+  if(i<0||i>=slides.length||i===cur)return;
+  buildsOf(cur).forEach(e=>{e.classList.remove('in');e.style.transitionDelay=''});
+  cur=i;
+  slides.forEach((s,k)=>s.classList.toggle('on',k===cur));
+  dotEls.forEach((d,k)=>{d.classList.toggle('on',k===cur);d.classList.toggle('seen',k<cur)});
+  bar.style.width=((cur+1)/slides.length*100)+'%';
+  meta.textContent=String(cur+1).padStart(2,'0')+' / '+slides.length;
+  notesBody.innerHTML=NOTES[cur]||'';
+  /* builds auto-play, staggered — the presenter advances SLIDES, not builds */
+  buildsOf(cur).forEach((el,k)=>{
+    el.style.transitionDelay=(240+k*90)+'ms';
+    requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('in')));
+  });
+  try{chan&&chan.postMessage({i:cur})}catch(e){}
+  fire(cur);
+}
+addEventListener('keydown',e=>{
+  if(['ArrowRight',' ','PageDown','Enter'].includes(e.key)){e.preventDefault();goto(cur+1)}
+  else if(['ArrowLeft','PageUp','Backspace'].includes(e.key)){e.preventDefault();goto(cur-1)}
+  else if(e.key==='Home')goto(0);
+  else if(e.key==='End')goto(slides.length-1);
+  else if(e.key==='n'||e.key==='N')notesEl.classList.toggle('on');
+  else if(e.key==='s'||e.key==='S')openSpeaker();
+  else if(e.key==='f'||e.key==='F')document.documentElement.requestFullscreen?.();
+  hint.classList.add('gone');
+});
+dots.addEventListener('click',e=>{const d=e.target.closest('i');if(d)goto(+d.dataset.i)});
+document.getElementById('viewport').addEventListener('click',e=>{
+  if(e.target.closest('#dots,#notes,#hint,button'))return;
+  const r=e.currentTarget.getBoundingClientRect();
+  goto((e.clientX-r.left)/r.width<0.28?cur-1:cur+1);
+  hint.classList.add('gone');
+});
+setTimeout(()=>hint.classList.add('gone'),7000);
+
+/* fixed stage, scaled to fit — deterministic, never reflows */
+function fit(){const s=Math.min(innerWidth/1920,innerHeight/1080);
+  document.getElementById('deck').style.transform=`translate(-50%,-50%) scale(${s})`}
+addEventListener('resize',fit);fit();
+const deckScale=()=>Math.min(innerWidth/1920,innerHeight/1080);
+
+/* ══════════ speaker window — present with this, not the drawer ══════════ */
+let chan=null; try{chan=new BroadcastChannel('deck')}catch(e){}
+function openSpeaker(){
+  const w=window.open('','speaker','width=860,height=720');
+  if(!w)return;                                    /* popup blocked — allow it before you present */
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>Speaker view</title><style>
+    body{margin:0;background:#0b0a0e;color:#e9e7ee;padding:26px 30px;
+      font:16px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    h1{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:#8a8890;margin:0 0 6px}
+    #t{font-variant-numeric:tabular-nums;font-size:38px;font-weight:300;letter-spacing:-.03em;margin:0 0 4px}
+    #c{color:#8a8890;font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 24px}
+    #b p{margin:0 0 14px;color:#c3c1cb}#b strong{color:#fff}.beat{color:#8ab4f8;font-weight:600}
+    hr{border:0;border-top:1px solid #26242c;margin:22px 0}#n{color:#78767f;font-size:14px}#n b{color:#a5a3ad}
+  </style><h1>Speaker view</h1><div id="t">00:00</div><div id="c">—</div><div id="b"></div><hr><div id="n"></div>`);
+  w.document.close();
+  const t0=Date.now();
+  setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000),el=w.document.getElementById('t');
+    if(el)el.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')},500);
+  const paint=i=>{
+    if(w.closed)return;
+    w.document.getElementById('c').textContent='Slide '+(i+1)+' of '+slides.length;
+    w.document.getElementById('b').innerHTML=NOTES[i]||'';
+    w.document.getElementById('n').innerHTML=NOTES[i+1]
+      ? '<b>Next →</b> '+NOTES[i+1].replace(/<[^>]+>/g,' ').trim().slice(0,150)+'…'
+      : '<b>End.</b> Leave the last slide up for Q&amp;A.';
+  };
+  paint(cur);
+  if(chan)chan.onmessage=e=>paint(e.data.i); else setInterval(()=>paint(cur),400);
+}
+
+/* ══════════ per-slide choreography ══════════
+   Anything scripted goes here, keyed off the slide. The token guards against a
+   fast presenter leaving two sequences running at once — check it after EVERY await. */
+const RM=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const wait=ms=>new Promise(r=>setTimeout(r,RM?Math.min(ms,60):ms));
+let tok=0;
+function fire(i){
+  tok++; const id=tok, S=slides[i];
+  if(!S)return;
+
+  /* example — sequential reveal
+  if(S.querySelector('.timeline')){
+    const steps=[...S.querySelectorAll('.step')];
+    steps.forEach(s=>s.classList.remove('on'));
+    (async()=>{ await wait(600); if(id!==tok)return;
+      for(const s of steps){ if(id!==tok)return; s.classList.add('on'); await wait(1050) }
+    })();
+  } */
+}
+
+/* Looping animations must be gated on visibility so they don't run in the background:
+setInterval(()=>{
+  const el=document.getElementById('thing');
+  if(!el || !el.closest('.s').classList.contains('on')) return;
+  // one beat of the loop
+},900); */
+
+goto(0);
+</script>
+</body>
+</html>

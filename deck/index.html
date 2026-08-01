@@ -684,7 +684,9 @@ em{font-style:italic;color:var(--ink)}
         </g>
 
         <g data-b data-fx="fade">
-          <text class="dL" x="0" y="436">AND EACH CARRIES</text>
+          <!-- Clears the bus at y=430: this label is wide enough to reach x=205,
+               and the bus starts at x=197, so on the baseline they collided. -->
+          <text class="dL" x="0" y="412">AND EACH CARRIES</text>
           <path class="edge" d="M 197 340 V 430 H 1487 V 340"/>
           <path class="edge" d="M 622 340 V 430"/>
           <path class="edge" d="M 1047 340 V 430"/>
