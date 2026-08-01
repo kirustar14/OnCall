@@ -19,6 +19,7 @@
   --color-accent-error: #b3261e;
   --color-accent-gold: #c9a227;
   --color-accent-query: #4a5c8c;
+  --color-accent-tool: #4a7f8c;
 
   /* Alerts are the one deliberate exception to the muted palette —
      safety-critical, must read as urgent. Urgency-scoped variants below
@@ -537,8 +538,8 @@ body {
 }
 
 .badge-tool_result {
-  color: #4a7f8c;
-  border-color: #4a7f8c;
+  color: var(--color-accent-tool);
+  border-color: var(--color-accent-tool);
 }
 
 .badge-decision {
@@ -1236,70 +1237,83 @@ body {
   opacity: 0.62;
 }
 
-/* ---------- point of view ---------- */
+/* ---------- point of view ----------
+   Same card, same label treatment, same pill controls as .audio-source and
+   .speaker-roles beside it. These panels sit in one column, so a second palette
+   here reads as a different application bolted on. */
 
-.pov-look {
+.pov-look,
+.audio-devices {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 16px;
   margin-top: 16px;
-  background: #14161b;
-  border: 1px solid #262a33;
-  border-radius: 8px;
-  padding: 12px;
 }
 
-.pov-look-head {
+.pov-look-head,
+.audio-devices-head {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin-bottom: 9px;
   flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 
-.pov-look-head h4 {
+.pov-look-head h4,
+.audio-devices-head h4 {
   margin: 0;
   flex: 1;
-  font-size: 13px;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #8a919e;
+  letter-spacing: 0.09em;
+  color: var(--color-text-label);
 }
 
+/* Its own line. The left column is 320px and this note is long, so sharing a
+   row with the label just wrapped "POINT OF VIEW" onto two lines. */
 .pov-proxy {
-  font-size: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #5b616c;
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
 .look-btn {
   width: 100%;
-  background: #1b2b47;
-  border: 1px solid #2a3a6a;
-  color: #cfe0ff;
-  border-radius: 6px;
-  padding: 8px 12px;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 8px 14px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
+  font-family: var(--font-sans);
   cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .look-btn:hover:not(:disabled) {
-  background: #223458;
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
 }
 
 .look-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: default;
 }
 
 .pov-result {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid #262a33;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
 }
 
 .pov-frame {
   width: 100%;
-  border-radius: 6px;
-  border: 1px solid #262a33;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
   display: block;
 }
 
@@ -1307,168 +1321,139 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #8a919e;
+  font-weight: 600;
+  color: var(--color-text-label);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
 
 .pov-confidence {
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 9.5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
   letter-spacing: 0.07em;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
 }
 
 .pov-confidence.clear {
-  background: #0f3d33;
-  color: #35d0a5;
-  border: 1px solid #1c4a3e;
+  color: var(--color-accent-live);
+  border-color: var(--color-accent-live);
 }
 
 .pov-confidence.partial {
-  background: #3a2a08;
-  color: #f0a840;
-  border: 1px solid #6b5117;
+  color: var(--color-accent-connecting);
+  border-color: var(--color-accent-connecting);
 }
 
 .pov-confidence.poor {
-  background: #2a2d35;
-  color: #8a919e;
-  border: 1px solid #3a3f4a;
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
 }
 
 .pov-description {
-  margin: 7px 0 0;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: #c6cad3;
+  margin: 9px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text);
 }
 
-/* Readings are the one place the system shows a number it did not hear. The
-   banner is not decoration — it is the reason this is allowed at all. */
+/* Readings are the one place the system shows a number nobody said out loud.
+   The banner is not decoration, it is the reason a camera is allowed in the
+   loop at all, so it keeps the advisory accent rather than going quiet. */
 .pov-readings {
-  margin-top: 9px;
-  border: 1px solid #4a3a1c;
-  border-radius: 6px;
-  background: #1a1408;
+  margin-top: 12px;
+  border: 1px solid var(--color-alert-advisory-bg);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-recessed);
   overflow: hidden;
 }
 
 .pov-readings-head {
-  padding: 4px 9px;
-  font-size: 9.5px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 5px 10px;
+  font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #f0a840;
-  background: #241c0d;
-  border-bottom: 1px solid #4a3a1c;
+  color: #ffffff;
+  background: var(--color-alert-advisory-bg);
 }
 
 .pov-reading {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 5px 9px;
-  font-size: 12px;
+  padding: 6px 10px;
+  font-size: 12.5px;
 }
 
 .pov-reading-label {
   flex: 1;
-  color: #8a919e;
+  color: var(--color-text-muted);
 }
 
 .pov-reading-value {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 700;
-  color: #e8eaed;
+  color: var(--color-text);
 }
 
 .pov-legibility {
-  font-size: 9.5px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  padding: 1px 5px;
-  border-radius: 3px;
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
   white-space: nowrap;
+  border: 1px solid currentColor;
 }
 
 .pov-legibility.clear {
-  color: #7fd6a0;
-  background: #17301f;
+  color: var(--color-accent-live);
 }
 
 .pov-legibility.partial {
-  color: #f0a840;
-  background: #2a2008;
+  color: var(--color-accent-connecting);
 }
 
 .pov-legibility.guessing {
-  color: #ff8a80;
-  background: #2e0f12;
+  color: var(--color-accent-error);
 }
 
 .pov-people {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   padding-left: 16px;
-  font-size: 12px;
-  color: #8a919e;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
 }
 
 .pov-prompt {
-  margin: 9px 0 0;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: #10151f;
-  border: 1px solid #2a3a6a;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: #cfe0ff;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-recessed);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent-query);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text);
 }
 
 /* ---------- audio devices (glasses) ---------- */
 
-.audio-devices {
-  margin-top: 16px;
-  background: #14161b;
-  border: 1px solid #262a33;
-  border-radius: 8px;
-  padding: 12px;
-}
-
-.audio-devices-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 9px;
-}
-
-.audio-devices-head h4 {
-  margin: 0;
-  flex: 1;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #8a919e;
-}
-
 .glasses-badge {
-  font-size: 9.5px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
   letter-spacing: 0.08em;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: #0f3d33;
-  color: #35d0a5;
-  border: 1px solid #1c4a3e;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-accent-live);
+  border: 1px solid var(--color-accent-live);
   white-space: nowrap;
 }
 
 .device-row {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .device-label {
@@ -1476,19 +1461,19 @@ body {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #5b616c;
-  margin-bottom: 4px;
+  color: var(--color-text-label);
+  margin-bottom: 5px;
 }
 
 .device-select {
   width: 100%;
-  background: #1b1e25;
-  border: 1px solid #262a33;
-  color: #e8eaed;
-  border-radius: 5px;
-  padding: 6px 8px;
-  font-size: 12px;
-  font-family: inherit;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  font-size: 12.5px;
+  font-family: var(--font-sans);
 }
 
 .device-select:disabled {
@@ -1496,8 +1481,8 @@ body {
 }
 
 .device-note {
-  margin: 6px 0 0;
-  font-size: 11px;
-  line-height: 1.45;
-  color: #5b616c;
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
 }
