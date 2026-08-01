@@ -1,5 +1,6 @@
 """In-memory store of all case state. Simple dict — no DB, per hackathon spec."""
 
+import itertools
 import json
 import logging
 import os
@@ -28,6 +29,15 @@ WORK_STATUS_TO_FHIR = {
 
 OPEN_STATUSES = ("open", "acknowledged")
 
+# Global, monotonic sequence across every alert in every case. There is one
+# physical speaker, so playback has to be ordered app-wide, and a counter is a
+# more reliable tie-break than comparing float timestamps.
+_alert_seq_counter = itertools.count()
+
+
+def next_alert_seq() -> int:
+    return next(_alert_seq_counter)
+
 
 @dataclass
 class TranscriptEntry:
@@ -42,22 +52,59 @@ class TranscriptEntry:
 
 @dataclass
 class Alert:
-    """A surfaced conflict. Deliberately has no "alternative" field — this
-    system states what is documented and how it relates to what was ordered.
-    It does not recommend a substitute drug."""
+    """Something the system said out loud, from either reasoning tier.
+
+    Two tiers produce alerts and the distinction matters, so `kind` keeps them
+    apart rather than flattening them:
+
+      "verified_conflict" — a documented allergy against an ordered drug whose
+          class was resolved through NIH RxNav. Deterministically triggered,
+          checkable after the fact, and it never recommends a substitute.
+      "agent" — the open-ended reasoner: dosing, vital patterns, prior
+          encounters, anything a fixed rule wouldn't catch. Broader reach, and
+          its basis is its stated reasoning rather than an external source.
+
+    Neither prescribes treatment. The difference is what backs the claim, and
+    the UI says which one you're looking at.
+    """
 
     id: str
     text: str
-    allergen: str
     timestamp: float
-    # The class that links the order to the allergy, e.g. "penicillin (beta-lactam)".
+    # Global ordering for the spoken-alert queue — one speaker, many cases.
+    seq: int = 0
+    urgency: str = "advisory"  # "critical" | "advisory" | "informational"
+    kind: str = "agent"  # "verified_conflict" | "agent"
+
+    # --- agent tier ---
+    reasoning: str = ""
+
+    # --- verified-conflict tier ---
+    allergen: str = ""
+    # The class linking the order to the allergy, e.g. "penicillin (beta-lactam)".
     drug_class: str = ""
     # Where the allergy came from — "parent via nurse", "EMS handoff".
     source: str = ""
-    # FDA/NIH classification for the ordered drug, from RxNav. When an EPC came
-    # back, the class claim is checkable rather than asserted by the model.
+    # FDA/NIH classification from RxNav. With an EPC present, the class claim is
+    # checkable rather than asserted.
     fda_classes: list[str] = field(default_factory=list)
     fda_verified: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "text": self.text,
+            "timestamp": self.timestamp,
+            "seq": self.seq,
+            "urgency": self.urgency,
+            "kind": self.kind,
+            "reasoning": self.reasoning,
+            "allergen": self.allergen,
+            "drug_class": self.drug_class,
+            "source": self.source,
+            "fda_classes": self.fda_classes,
+            "fda_verified": self.fda_verified,
+        }
 
 
 @dataclass
@@ -153,6 +200,17 @@ class CaseState:
 
     alerts: list[Alert] = field(default_factory=list)
 
+    # Issues the agent has already spoken, keyed by a slug it assigns itself
+    # (e.g. "penicillin_allergy_amoxicillin_conflict"). The agent reads this back
+    # and decides whether a new decision is the same issue unchanged (stay quiet)
+    # or genuinely new (speak, and update this). Never string-matched here — it
+    # is bookkeeping for the model, not a dedup key for us.
+    surfaced_issues: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    # Timestamped feed of every agent reasoning step — trigger, tool call, tool
+    # result, decision — for the Agent Log. Shape varies by step type.
+    agent_steps: list[dict[str, Any]] = field(default_factory=list)
+
     def open_work(self) -> list[WorkItem]:
         return [w for w in self.work if w.is_open]
 
@@ -199,19 +257,9 @@ class CaseState:
             "notes": self.notes,
             "case_details": self.case_details,
             "work": [w.to_dict() for w in self.work],
-            "alerts": [
-                {
-                    "id": a.id,
-                    "text": a.text,
-                    "allergen": a.allergen,
-                    "drug_class": a.drug_class,
-                    "source": a.source,
-                    "fda_classes": a.fda_classes,
-                    "fda_verified": a.fda_verified,
-                    "timestamp": a.timestamp,
-                }
-                for a in self.alerts
-            ],
+            "alerts": [a.to_dict() for a in self.alerts],
+            "agent_steps": self.agent_steps,
+            "surfaced_issues": self.surfaced_issues,
         }
 
 

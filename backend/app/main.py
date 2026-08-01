@@ -2,19 +2,22 @@ import asyncio
 import base64
 import json
 import logging
+import time
+import uuid
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.case_store import CaseState, TranscriptEntry, store
+from app.agent import make_alert, run_agent_step, run_query_step
+from app.case_store import Alert, CaseState, TranscriptEntry, next_alert_seq, store
 from app.deepgram_stt import DeepgramSTTSession
 from app.deepgram_tts import synthesize_speech
 from app.extraction import run_extraction_and_persist
 from app.handoff import build_handoff
+from app.intent import classify_segment
 from app.intervention import check_for_conflicts
 from app.medplum_client import medplum_client
-from app.query import answer_question
 from app.segmenter import UtteranceBuffer
 from app.warmup import warm_schemas
 from app.watchdog import watchdog_loop
@@ -94,8 +97,7 @@ async def query_case(req: QueryRequest):
     case = store.get(req.case_id)
     if case is None:
         return {"answer": f"No such case: {req.case_id}"}
-    answer = await answer_question(case, req.question)
-    return {"answer": answer}
+    return {"answer": await _answer_query(case, req.question)}
 
 
 def _structured_payload(case: CaseState) -> dict:
@@ -112,6 +114,60 @@ def _structured_payload(case: CaseState) -> dict:
             "status": case.status,
         },
     }
+
+
+async def _emit_agent_step(case: CaseState, step: dict) -> None:
+    """Stream one reasoning step to the Agent Log."""
+    entry = {"id": str(uuid.uuid4()), "case_id": case.case_id, "timestamp": time.time(), **step}
+    case.agent_steps.append(entry)
+    await ws_manager.send_json(case.case_id, {"type": "agent_step", **entry})
+
+
+async def _speak_alert(case: CaseState, alert: Alert) -> None:
+    """Bank an alert, synthesize it, and hand it to the frontend.
+
+    Ordering across cases is the browser's job — there is one speaker, and the
+    priority queue there decides what plays next. This just delivers one item.
+    """
+    case.alerts.append(alert)
+
+    audio_b64 = None
+    try:
+        audio_bytes = await synthesize_speech(alert.text)
+        if audio_bytes:
+            audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+    except Exception:
+        logger.exception("TTS failed for case %s", case.case_id)
+
+    await ws_manager.send_json(
+        case.case_id,
+        {
+            "type": "alert",
+            "alert": alert.to_dict(),
+            "audio_b64": audio_b64,
+            "audio_mime": "audio/mpeg",
+        },
+    )
+
+
+async def _answer_query(case: CaseState, question: str) -> str:
+    """Run the query agent, then speak the answer as an advisory item."""
+    result = await run_query_step(case, question, lambda s: _emit_agent_step(case, s))
+    answer = result.get("answer", "")
+    if answer:
+        await _speak_alert(
+            case,
+            Alert(
+                id=str(uuid.uuid4()),
+                text=answer,
+                timestamp=time.time(),
+                seq=next_alert_seq(),
+                urgency="advisory",
+                kind="agent",
+                reasoning=f"Answer to: {question}",
+            ),
+        )
+    return answer
 
 
 class SpeakerRoleRequest(BaseModel):
@@ -170,7 +226,27 @@ async def handoff(req: HandoffRequest):
 
 
 async def _handle_finalized_segment(case: CaseState, segment: str, speaker_label: str = "") -> None:
-    """Run extraction -> Medplum writes -> intervention check -> push updates."""
+    """One whole utterance, all the way through.
+
+        route  -> is this narration, or a question aimed at the assistant?
+        extract-> facts and work items into the ledger and into Medplum
+        tier 1 -> deterministic, FDA-verified contraindication check
+        tier 2 -> open-ended reasoning over everything a fixed rule misses
+
+    Both tiers can produce an alert and both go through the same speaker queue.
+    They differ in what backs the claim: tier 1 cites an external classification,
+    tier 2 cites its own reasoning. Neither prescribes treatment.
+    """
+    # A question addressed to the assistant is not case narration, and extracting
+    # it would record the clinician's question as if it were a clinical finding.
+    try:
+        if await classify_segment(segment):
+            await _emit_agent_step(case, {"step": "query", "text": segment})
+            await _answer_query(case, segment)
+            return
+    except Exception:
+        logger.exception("intent classification failed for case %s — treating as narration", case.case_id)
+
     try:
         await run_extraction_and_persist(case, segment, speaker_label)
     except Exception:
@@ -180,39 +256,60 @@ async def _handle_finalized_segment(case: CaseState, segment: str, speaker_label
     store.save()
     await ws_manager.send_json(case.case_id, _structured_payload(case))
 
+    # --- tier 1: verified contraindication -----------------------------------
     try:
-        new_alerts = await check_for_conflicts(case)
-    except Exception:
-        logger.exception("intervention check failed for case %s", case.case_id)
-        new_alerts = []
-
-    for alert in new_alerts:
-        audio_b64 = None
-        try:
-            audio_bytes = await synthesize_speech(alert.text)
-            if audio_bytes:
-                audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
-        except Exception:
-            logger.exception("TTS failed for case %s", case.case_id)
-
-        await ws_manager.send_json(
-            case.case_id,
-            {
-                "type": "alert",
-                "alert": {
-                    "id": alert.id,
-                    "text": alert.text,
-                    "allergen": alert.allergen,
-                    "drug_class": alert.drug_class,
-                    "source": alert.source,
-                    "fda_classes": alert.fda_classes,
-                    "fda_verified": alert.fda_verified,
-                    "timestamp": alert.timestamp,
+        for alert in await check_for_conflicts(case):
+            await _speak_alert(case, alert)
+            # Register it where tier 2 looks, so the agent doesn't say the same
+            # thing again in its own words a second later.
+            key = f"verified_conflict_{alert.allergen}_{alert.drug_class}".lower().replace(" ", "_")
+            case.surfaced_issues[key] = {
+                "alert_text": alert.text,
+                "reasoning": "Raised by the FDA-verified contraindication check.",
+                "timestamp": alert.timestamp,
+            }
+            await _emit_agent_step(
+                case,
+                {
+                    "step": "decision",
+                    "action_needed": True,
+                    "already_surfaced": False,
+                    "issue_key": key,
+                    "alert_text": alert.text,
+                    "urgency": alert.urgency,
+                    "reasoning": (
+                        f"Deterministic check: {alert.drug_class or 'drug class'} vs documented "
+                        f"{alert.allergen} allergy. "
+                        + (
+                            f"FDA classification confirms: {'; '.join(alert.fda_classes[:2])}."
+                            if alert.fda_verified
+                            else "Drug class could not be verified against FDA data."
+                        )
+                    ),
+                    "source": "verified_conflict",
                 },
-                "audio_b64": audio_b64,
-                "audio_mime": "audio/mpeg",
-            },
-        )
+            )
+    except Exception:
+        logger.exception("conflict check failed for case %s", case.case_id)
+
+    # --- tier 2: open-ended reasoning ----------------------------------------
+    # Runs on every utterance, sees the full picture read back from Medplum, and
+    # decides for itself whether anything is worth saying. It suppresses issues
+    # it has already raised, so tier 1's alert doesn't get echoed a second time.
+    try:
+        decision = await run_agent_step(case, segment, lambda s: _emit_agent_step(case, s))
+        if (
+            decision.get("action_needed")
+            and decision.get("alert_text")
+            # The agent tracks what it has already raised; re-speaking a standing
+            # issue every utterance is how a room learns to tune it out.
+            and not decision.get("already_surfaced")
+        ):
+            await _speak_alert(case, make_alert(decision))
+    except Exception:
+        logger.exception("reasoning agent failed for case %s", case.case_id)
+
+    store.save()
 
 
 @app.websocket("/ws/case/{case_id}")

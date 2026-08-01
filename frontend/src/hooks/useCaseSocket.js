@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startAudioCapture, stopAudioCapture } from '../lib/audioCapture';
 import { startFilePlayback } from '../lib/filePlayback';
+import { enqueueAlert } from '../lib/audioQueue';
 
 const WS_BASE = import.meta.env.VITE_WS_BASE || `ws://${window.location.hostname}:8000`;
 const API_BASE = import.meta.env.VITE_API_BASE || `http://${window.location.hostname}:8000`;
@@ -14,20 +15,12 @@ const emptyStructured = {
   work: [],
 };
 
-function playBase64Audio(b64, mime) {
-  try {
-    const byteChars = atob(b64);
-    const byteNumbers = new Array(byteChars.length);
-    for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-    const blob = new Blob([new Uint8Array(byteNumbers)], { type: mime });
-    const audio = new Audio(URL.createObjectURL(blob));
-    audio.play().catch((e) => console.warn('agent audio playback blocked', e));
-  } catch (err) {
-    console.warn('failed to decode/play agent audio', err);
-  }
-}
+// Everything the system says out loud goes through one queue. There is a single
+// speaker, and a watchdog prompt talking over a critical contraindication is how
+// a room learns to ignore both.
+let localSeq = 1e9; // ordering for client-side utterances that carry no server seq
 
-export function useCaseSocket(caseId) {
+export function useCaseSocket(caseId, onAgentStep) {
   const [status, setStatus] = useState('connecting'); // connecting | recording | closed | error
   const [transcript, setTranscript] = useState('');
   const [interim, setInterim] = useState('');
@@ -52,6 +45,19 @@ export function useCaseSocket(caseId) {
   const mediaStreamRef = useRef(null);
   const inputModeRef = useRef('mic');
   const playbackRef = useRef(null);
+
+  // Refs, not dependencies: a new callback identity or a status change must not
+  // tear down the socket and reopen the mic mid-case. statusRef also gives the
+  // audio queue a live read for its open-case-wins tiebreak.
+  const onAgentStepRef = useRef(onAgentStep);
+  useEffect(() => {
+    onAgentStepRef.current = onAgentStep;
+  }, [onAgentStep]);
+
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,15 +93,47 @@ export function useCaseSocket(caseId) {
           return item && (item.owner || item.status !== 'open') ? null : prev;
         });
       } else if (msg.type === 'alert') {
+        // The banner appears immediately; only the speech is queued.
         setAlerts((prev) => [...prev, msg.alert]);
-        if (msg.audio_b64) playBase64Audio(msg.audio_b64, msg.audio_mime || 'audio/mpeg');
+        enqueueAlert({
+          id: msg.alert.id,
+          caseId,
+          caseStatus: statusRef.current,
+          urgency: msg.alert.urgency,
+          seq: msg.alert.seq,
+          timestamp: msg.alert.timestamp,
+          audioB64: msg.audio_b64,
+          audioMime: msg.audio_mime,
+        });
       } else if (msg.type === 'unowned_prompt') {
         setUnownedPrompt(msg);
-        if (msg.audio_b64) playBase64Audio(msg.audio_b64, msg.audio_mime || 'audio/mpeg');
+        // Advisory: asking who owns a task must never cut across a
+        // contraindication warning.
+        enqueueAlert({
+          id: msg.work_id,
+          caseId,
+          caseStatus: statusRef.current,
+          urgency: 'advisory',
+          seq: localSeq++,
+          timestamp: Date.now() / 1000,
+          audioB64: msg.audio_b64,
+          audioMime: msg.audio_mime,
+        });
+      } else if (msg.type === 'agent_step') {
+        onAgentStepRef.current?.(msg);
       } else if (msg.type === 'handoff') {
         setHandoffBrief(msg.brief);
         setHandoffLoading(false);
-        if (msg.audio_b64) playBase64Audio(msg.audio_b64, msg.audio_mime || 'audio/mpeg');
+        enqueueAlert({
+          id: `handoff-${caseId}-${Date.now()}`,
+          caseId,
+          caseStatus: statusRef.current,
+          urgency: 'informational',
+          seq: localSeq++,
+          timestamp: Date.now() / 1000,
+          audioB64: msg.audio_b64,
+          audioMime: msg.audio_mime,
+        });
       } else if (msg.type === 'status' && msg.status === 'closed') {
         setStatus('closed');
       }

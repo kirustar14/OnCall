@@ -21,7 +21,7 @@ import uuid
 
 import anthropic
 
-from app.case_store import Alert, CaseState
+from app.case_store import Alert, CaseState, next_alert_seq
 from app.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 from app.rxnav import drug_classes, epc_classes
 
@@ -256,10 +256,16 @@ async def check_for_conflicts(case: CaseState) -> list[Alert]:
         alert = Alert(
             id=str(uuid.uuid4()),
             text=_spoken_alert(case, allergy, med, assessment),
+            timestamp=time.time(),
+            seq=next_alert_seq(),
+            # A documented allergy against an ordered drug of that class is the
+            # one thing here that always jumps the speaker queue.
+            urgency="critical",
+            kind="verified_conflict",
+            reasoning=assessment.get("basis", ""),
             allergen=allergy["allergen"],
             drug_class=assessment.get("drug_class", ""),
             source=(allergy.get("source") or "").strip(),
-            timestamp=time.time(),
             fda_classes=fda,
             # The difference between "the model says so" and "the FDA says so".
             fda_verified=bool(epc_classes(fda)),

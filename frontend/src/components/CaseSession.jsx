@@ -33,7 +33,7 @@ function StructuredList({ title, items, render }) {
   );
 }
 
-export default function CaseSession({ caseId, active }) {
+export default function CaseSession({ caseId, active, onAgentStep }) {
   const {
     status,
     transcript,
@@ -55,16 +55,26 @@ export default function CaseSession({ caseId, active }) {
     playFile,
     stopPlayback,
     dismissHandoff,
-  } = useCaseSocket(caseId);
+  } = useCaseSocket(caseId, onAgentStep);
 
   return (
     <div className={`case-session ${active ? '' : 'hidden'} ${status === 'closed' ? 'case-closed' : ''}`}>
       {alerts.length > 0 && (
         <div className="alert-stack">
           {alerts.map((a) => (
-            <div className="alert-banner" key={a.id}>
+            <div className={`alert-banner urgency-${a.urgency || 'critical'}`} key={a.id}>
               <div className="alert-text">⚠️ {a.text}</div>
-              {a.fda_verified ? (
+              {/* The two tiers look different on purpose: one cites the FDA,
+                  the other cites its own reasoning. */}
+              {a.kind === 'agent' && a.reasoning ? (
+                <div className="alert-provenance">
+                  <span className={`urgency-tag urgency-${a.urgency || 'advisory'}`}>
+                    {(a.urgency || 'advisory').toUpperCase()}
+                  </span>
+                  {a.reasoning}
+                  <span className="fda-source">agent reasoning</span>
+                </div>
+              ) : a.fda_verified ? (
                 <div className="alert-provenance">
                   <span className="fda-stamp">FDA VERIFIED</span>
                   {(a.fda_classes || [])
