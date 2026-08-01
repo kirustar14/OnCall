@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useCaseSocket } from '../hooks/useCaseSocket';
 import VideoPreview from './VideoPreview';
 import Ledger from './Ledger';
@@ -57,40 +58,76 @@ export default function CaseSession({ caseId, active, onAgentStep }) {
     dismissHandoff,
   } = useCaseSocket(caseId, onAgentStep);
 
+  // Only the current alert is shown. Reasoning stays collapsed by default and
+  // re-collapses when a new alert arrives, so the banner never grows into a
+  // wall of text mid-case.
+  const [showReasoning, setShowReasoning] = useState(false);
+  const latestAlert = alerts.length ? alerts[alerts.length - 1] : null;
+  const earlierAlerts = Math.max(0, alerts.length - 1);
+
+  useEffect(() => {
+    setShowReasoning(false);
+  }, [latestAlert?.id]);
+
   return (
     <div className={`case-session ${active ? '' : 'hidden'} ${status === 'closed' ? 'case-closed' : ''}`}>
-      {alerts.length > 0 && (
+      {latestAlert && (
         <div className="alert-stack">
-          {alerts.map((a) => (
-            <div className={`alert-banner urgency-${a.urgency || 'critical'}`} key={a.id}>
-              <div className="alert-text">⚠️ {a.text}</div>
-              {/* The two tiers look different on purpose: one cites the FDA,
-                  the other cites its own reasoning. */}
-              {a.kind === 'agent' && a.reasoning ? (
-                <div className="alert-provenance">
-                  <span className={`urgency-tag urgency-${a.urgency || 'advisory'}`}>
-                    {(a.urgency || 'advisory').toUpperCase()}
-                  </span>
-                  {a.reasoning}
-                  <span className="fda-source">agent reasoning</span>
-                </div>
-              ) : a.fda_verified ? (
-                <div className="alert-provenance">
-                  <span className="fda-stamp">FDA VERIFIED</span>
-                  {(a.fda_classes || [])
-                    .filter((c) => c.startsWith('EPC:'))
-                    .map((c) => c.replace('EPC: ', ''))
-                    .join(' · ')}
-                  <span className="fda-source">NIH RxNav</span>
-                </div>
-              ) : (
-                <div className="alert-provenance">
-                  <span className="fda-stamp unverified">UNVERIFIED CLASS</span>
-                  no FDA classification returned — reasoning only
-                </div>
+          {/* Only the current alert, and only the line that was spoken. The
+              reasoning is long by design and already streams to the Agent Log;
+              putting it here stacked three deep buried the thing the clinician
+              actually needs to read. */}
+          <div className={`alert-banner urgency-${latestAlert.urgency || 'critical'}`}>
+            <div className="alert-head">
+              <span className="alert-text">⚠️ {latestAlert.text}</span>
+              {latestAlert.reasoning && (
+                <button
+                  className="alert-why"
+                  onClick={() => setShowReasoning((v) => !v)}
+                  aria-expanded={showReasoning}
+                >
+                  {showReasoning ? 'hide why' : 'why'}
+                </button>
               )}
             </div>
-          ))}
+
+            <div className="alert-provenance">
+              {/* The two tiers are labelled differently on purpose: one cites
+                  the FDA, the other cites itself. */}
+              {latestAlert.kind === 'verified_conflict' && latestAlert.fda_verified ? (
+                <>
+                  <span className="fda-stamp">FDA VERIFIED</span>
+                  <span>
+                    {(latestAlert.fda_classes || [])
+                      .filter((c) => c.startsWith('EPC:'))
+                      .map((c) => c.replace('EPC: ', ''))
+                      .join(' · ')}
+                  </span>
+                  <span className="fda-source">NIH RxNav</span>
+                </>
+              ) : latestAlert.kind === 'verified_conflict' ? (
+                <>
+                  <span className="fda-stamp unverified">UNVERIFIED CLASS</span>
+                  <span>no FDA classification returned</span>
+                </>
+              ) : (
+                <>
+                  <span className="fda-stamp">{(latestAlert.urgency || 'advisory').toUpperCase()}</span>
+                  <span className="fda-source">agent reasoning</span>
+                </>
+              )}
+
+              {earlierAlerts > 0 && (
+                <span className="alert-earlier">
+                  {earlierAlerts} earlier in Agent Log
+                </span>
+              )}
+            </div>
+
+            {showReasoning && latestAlert.reasoning && (
+              <p className="alert-reasoning">{latestAlert.reasoning}</p>
+            )}
+          </div>
         </div>
       )}
 
