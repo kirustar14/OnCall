@@ -71,6 +71,7 @@ struct ContentView: View {
                 Section("Glasses") {
                     LabeledContent("Step", value: streamer.step)
                     LabeledContent("Registration", value: streamer.registration)
+                    LabeledContent("Camera permission", value: streamer.cameraPermission)
                     LabeledContent("Stream", value: streamer.streamState)
                     LabeledContent("Frames received", value: "\(streamer.framesReceived)")
                     LabeledContent("Frames posted", value: "\(streamer.framesPosted)")

@@ -47,6 +47,7 @@ final class GlassesStreamer {
     /// and the session call that follows would wait forever.
     private(set) var step: String = "idle"
     private(set) var registration: String = "unknown"
+    private(set) var cameraPermission: String = "unknown"
     private(set) var streamState: String = "stopped"
     private(set) var framesReceived: Int = 0
     private(set) var framesPosted: Int = 0
@@ -158,6 +159,27 @@ final class GlassesStreamer {
             }
 
             // createSession is synchronous-throwing in v0.7.0.
+            // Camera access is a separate grant from registration, requested
+            // through Meta AI. Without it the stream silently reports
+            // "stopped" and delivers nothing — the SDK's changelog is explicit:
+            // "Streaming status is set to stopped if permission is not granted."
+            step = "checking camera permission"
+            var status = try await wearables.checkPermissionStatus(.camera)
+            cameraPermission = String(describing: status)
+
+            if status != .granted {
+                step = "requesting camera permission"
+                // Hands off to Meta AI and returns through the app's URL scheme.
+                status = try await wearables.requestPermission(.camera)
+                cameraPermission = String(describing: status)
+            }
+
+            guard status == .granted else {
+                step = "camera permission denied"
+                lastError = "Camera permission was not granted. Approve it in Meta AI, then start again."
+                return
+            }
+
             step = "creating session"
             let newSession = try wearables.createSession(deviceSelector: selector)
             deviceSession = newSession
