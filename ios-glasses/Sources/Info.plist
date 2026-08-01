@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>OnCall Glasses</string>
 	<key>CFBundleExecutable</key>
@@ -18,8 +18,32 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.cortexon.rareinsight</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>rareinsight</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>MWDAT</key>
+	<dict>
+		<key>AppLinkURLScheme</key>
+		<string>rareinsight://</string>
+		<key>ClientToken</key>
+		<string>AR|2225724131507605|b89edb764f44031535229e40911501e2</string>
+		<key>DAMEnabled</key>
+		<true/>
+		<key>MetaAppID</key>
+		<string></string>
+		<key>TeamID</key>
+		<string>R865YU98DC</string>
+	</dict>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

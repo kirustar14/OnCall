@@ -25,3 +25,5 @@ frontend/.env
 ios-glasses/build/
 ios-glasses/*.xcodeproj/project.xcworkspace/xcuserdata/
 ios-glasses/*.xcodeproj/xcuserdata/
+
+ios-glasses/Sources/Info.plist

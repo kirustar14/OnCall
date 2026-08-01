@@ -29,22 +29,6 @@ targets:
         product: MWDATCore
       - package: MetaWearablesDAT
         product: MWDATCamera
-    info:
-      path: Sources/Info.plist
-      properties:
-        CFBundleDisplayName: OnCall Glasses
-        CFBundleShortVersionString: "1.0"
-        CFBundleVersion: "1"
-        UILaunchScreen: {}
-        UISupportedInterfaceOrientations:
-          - UIInterfaceOrientationPortrait
-        # The backend runs over plain HTTP on the LAN during a demo.
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-        NSLocalNetworkUsageDescription:
-          Sends point-of-view frames to the OnCall backend on this network.
-        NSBluetoothAlwaysUsageDescription:
-          Connects to Meta Ray-Ban Display glasses to receive the camera stream.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cortexon.rareinsight
@@ -53,3 +37,4 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Sources/Info.plist
