@@ -29,7 +29,11 @@
    ══════════════════════════════════════════════════════════════════════ */
 :root{
   /* ── STAGE · the deck's own surface ── */
-  --bg:#100f0d; --ink:#f2efe6; --ink-2:rgba(242,239,230,.62); --ink-3:rgba(242,239,230,.38);
+  /* --ink-3 was .38, which computes to #66645f on this ground: a 3.3:1 ratio.
+     Every eyebrow and every diagram label uses it, and all of them sat under
+     the 4.5:1 floor — badly under the ~7:1 a projected deck wants. .52 lands
+     at 5.1:1 without turning the labels into a second voice. */
+  --bg:#100f0d; --ink:#f2efe6; --ink-2:rgba(242,239,230,.62); --ink-3:rgba(242,239,230,.52);
   --hair:rgba(242,239,230,.10); --hair-2:rgba(242,239,230,.20);
 
   /* ── ACCENT · the product's critical red. The only saturated colour. ── */
@@ -71,7 +75,11 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;
 #aura b:nth-child(2){width:820px;height:820px;right:-6%;bottom:-18%;background:#2a2a22;opacity:.5;animation:d2 45s ease-in-out infinite}
 @keyframes d1{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(80px,50px,0) scale(1.1)}}
 @keyframes d2{0%,100%{transform:translate3d(0,0,0) scale(1.04)}50%{transform:translate3d(-60px,-70px,0) scale(.95)}}
-#trace{position:absolute;left:0;right:0;top:52%;z-index:0;pointer-events:none;opacity:.09}
+/* The motif sits at the vertical middle, which is exactly where the diagrams
+   and the statement slides put their type. At .09 it was legibly crossing
+   letterforms on five of twelve slides — worst on the closing slide, which
+   stays up through Q&A. At .05 it still reads as depth and stops competing. */
+#trace{position:absolute;left:0;right:0;top:52%;z-index:0;pointer-events:none;opacity:.05}
 #grain{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:.035;mix-blend-mode:overlay;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
 
@@ -224,8 +232,9 @@ em{font-style:italic;color:var(--ink)}
       </svg>
     </div>
     <h1 class="t-mega" data-b>OnCall</h1>
-    <p class="t-sm" data-b style="margin-top:38px;max-width:24ch">
-      Listens to the room. Keeps the record. Speaks once.</p>
+    <!-- Explicit break: left to wrap, it split "Keeps the / record" mid-sentence. -->
+    <p class="t-sm" data-b style="margin-top:38px;max-width:36ch">
+      Listens to the room.<br>Keeps the record. Speaks once.</p>
     <p class="lbl" data-b data-fx="fade" style="margin-top:64px">
       Deepgram &nbsp;·&nbsp; Medplum &nbsp;·&nbsp; moss.dev &nbsp;·&nbsp; Claude Opus 5 &nbsp;·&nbsp; NIH RxNav</p>
   </section>
@@ -243,8 +252,10 @@ em{font-style:italic;color:var(--ink)}
         <path class="edge-soft" d="M 0 230 H 1690" data-b data-fx="fade"/>
 
         <g data-b>
-          <line class="edge-soft" x1="70" y1="230" x2="70" y2="176"/>
-          <circle class="d-ink" cx="70" cy="230" r="7"/>
+          <!-- Sits at the axis origin, so the left-aligned label lines up with its own
+               tick. Centring this label clipped it off the left edge of the frame. -->
+          <line class="edge-soft" x1="10" y1="230" x2="10" y2="176"/>
+          <circle class="d-ink" cx="10" cy="230" r="7"/>
           <text class="dMi" x="0" y="160">GCS 13 · HR 122 · open tibia</text>
           <text class="dL" x="0" y="128">0:00 HANDOFF</text>
         </g>
@@ -307,9 +318,14 @@ em{font-style:italic;color:var(--ink)}
           <text class="dHs" x="125" y="344" text-anchor="middle">the room</text>
         </g>
 
-        <path class="edge flow" d="M 250 307 C 400 307, 400 96, 552 96" marker-end="url(#ah)" data-b data-fx="fade"/>
-        <path class="edge flow" d="M 250 307 H 552" marker-end="url(#ah)" data-b data-fx="fade"/>
-        <path class="edge flow" d="M 250 307 C 400 307, 400 518, 552 518" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <!-- A trunk that splits, not three curves sharing an origin. Three dashed
+             strokes leaving the same point overlapped into a solid wedge that read
+             as an arrowhead pointing backwards into the source. -->
+        <path class="edge" d="M 250 307 H 330" data-b data-fx="fade"/>
+        <path class="edge" d="M 330 96 V 518" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 330 96 H 552" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 330 307 H 552" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 330 518 H 552" marker-end="url(#ah)" data-b data-fx="fade"/>
 
         <g data-b>
           <rect class="box" x="566" y="46" width="330" height="100" rx="16"/>
@@ -548,9 +564,12 @@ em{font-style:italic;color:var(--ink)}
           <text class="dM" x="40" y="506">can never promote itself to critical</text>
         </g>
 
-        <path class="edge-hot flow" d="M 760 150 H 1090" marker-end="url(#ahc)" data-b data-fx="fade"/>
-        <path class="edge-soft dash" d="M 760 410 C 900 410, 900 220, 1040 200" data-b data-fx="fade"/>
-        <g data-b data-fx="fade"><g transform="translate(1076,192)">
+        <!-- This used to end at y=150, level with tier 1's own centre, which put the
+             arrowhead 32 units ABOVE the Aura box (y=182..378) — pointing at nothing.
+             It now curves down and lands inside the box's left edge. -->
+        <path class="edge-hot flow" d="M 760 150 C 920 150, 980 220, 1108 220" marker-end="url(#ahc)" data-b data-fx="fade"/>
+        <path class="edge-soft dash" d="M 760 410 C 900 410, 940 320, 1024 320" data-b data-fx="fade"/>
+        <g data-b data-fx="fade"><g transform="translate(1056,320)">
           <circle r="22" fill="var(--bg)" stroke="var(--ink-3)" stroke-width="2.2"/>
           <path d="M -8 -8 L 8 8 M 8 -8 L -8 8" stroke="var(--ink-3)" stroke-width="2.4"/>
         </g></g>
@@ -580,10 +599,12 @@ em{font-style:italic;color:var(--ink)}
           <text class="dHs" x="34" y="310">severe penicillin allergy.”</text>
         </g>
 
-        <path class="edge flow" d="M 560 282 C 660 282, 660 78, 760 78" marker-end="url(#ah)" data-b data-fx="fade"/>
-        <path class="edge flow" d="M 560 282 C 660 282, 660 214, 760 214" marker-end="url(#ah)" data-b data-fx="fade"/>
-        <path class="edge flow" d="M 560 282 C 660 282, 660 350, 760 350" marker-end="url(#ah)" data-b data-fx="fade"/>
-        <path class="edge-hot flow" d="M 560 282 C 660 282, 660 486, 760 486" marker-end="url(#ahc)" data-b data-fx="fade"/>
+        <path class="edge" d="M 560 282 H 640" data-b data-fx="fade"/>
+        <path class="edge" d="M 640 78 V 486" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 640 78 H 760" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 640 214 H 760" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 640 350 H 760" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge-hot flow" d="M 640 486 H 760" marker-end="url(#ahc)" data-b data-fx="fade"/>
 
         <g data-b>
           <rect class="box" x="774" y="34" width="916" height="88" rx="16"/>
@@ -641,7 +662,10 @@ em{font-style:italic;color:var(--ink)}
                ("has anyone mentioned her mother?") does not, which is what the
                semantic index is for. Medplum stays the source of truth. -->
           <div class="app-bar" style="margin:22px 0 0">
-            <span class="q" style="color:#2f9e4f">moss.dev &nbsp;“anything about her mother?”</span>
+            <!-- Same blue as the FHIR query above: green is reserved for "listening"
+                 in this deck's system. The dashed border is what marks this lookup as
+                 the fuzzy one — it is an approximate match, not an exact search. -->
+            <span class="q" style="border-style:dashed">moss.dev &nbsp;“anything about her mother?”</span>
             <span class="n">SEMANTIC RECALL · ACROSS EVERY CASE</span>
           </div>
         </div>
