@@ -25,7 +25,7 @@
                  listening. Product tokens live in their own group and are
                  lifted verbatim from frontend/src/App.css.
      Motion ...  Material 3 easing. Movement only where it carries the
-                 argument: the race on slide 05.
+                 argument: the race on slide 07, the block on slide 05.
    ══════════════════════════════════════════════════════════════════════ */
 :root{
   /* ── STAGE · the deck's own surface ── */
@@ -138,7 +138,6 @@ em{font-style:italic;color:var(--ink)}
 .dMh{font-family:var(--mono);font-size:20px;fill:var(--accent)}
 .dL{font-family:var(--mono);font-size:16px;letter-spacing:.2em;fill:var(--ink-3)}
 .dBig{font-family:var(--sans);font-size:42px;font-weight:300;fill:var(--ink)}
-.dNum{font-family:var(--sans);font-size:92px;font-weight:300;letter-spacing:-.03em;fill:var(--ink)}
 .d-hot{fill:var(--accent)}
 .d-ink{fill:var(--ink)}
 .d-live{fill:var(--live)}
@@ -240,47 +239,68 @@ em{font-style:italic;color:var(--ink)}
       Deepgram &nbsp;·&nbsp; Medplum &nbsp;·&nbsp; moss.dev &nbsp;·&nbsp; Claude Opus 5 &nbsp;·&nbsp; NIH RxNav</p>
   </section>
 
-  <!-- ══════════ 02 · the evidence ══════════ -->
+  <!-- ══════════ 02 · the problem — timeline artifact ══════════ -->
   <section class="s mid">
     <div class="shead">
-      <p class="lbl">The evidence</p>
-      <h2>A third of malpractice claims begin with something that was said.</h2>
+      <p class="lbl">A trauma bay, 57 seconds</p>
+      <h2>Everything is said. Nothing is written.</h2>
     </div>
     <div class="canvas">
-      <svg viewBox="0 0 1700 620" role="img"
-           aria-label="Malpractice and interruption figures, and the twelve seconds between an allergy and a conflicting order">
-        <g data-b>
-          <text class="dNum d-hot" x="0" y="110">30%</text>
-          <text class="dM" x="0" y="152">of 23,000 malpractice claims</text>
-          <text class="dNum" x="560" y="110">1,744</text>
-          <text class="dM" x="560" y="152">deaths</text>
-          <text class="dNum" x="1100" y="110">$1.7B</text>
-          <text class="dM" x="1100" y="152">in costs</text>
-          <text class="dL" x="0" y="200">CRICO STRATEGIES · 23,000 US MALPRACTICE CLAIMS · 2009–2013</text>
-        </g>
-
-        <line class="edge-soft dash" x1="0" y1="248" x2="1700" y2="248" data-b data-fx="fade"/>
+      <svg viewBox="0 0 1700 640" role="img"
+           aria-label="Five spoken moments on a time axis above an empty record">
+        <text class="dL" x="0" y="26">WHAT THE ROOM SAID</text>
+        <path class="edge-soft" d="M 0 230 H 1690" data-b data-fx="fade"/>
 
         <g data-b>
-          <text class="dNum" x="0" y="372">9.7</text>
-          <text class="dM" x="0" y="414">interruptions per hour, ED physicians</text>
-          <text class="dM" x="0" y="444">against 3.9 in primary care</text>
-          <text class="dL" x="0" y="492">CHISHOLM ET AL. · ACADEMIC EMERGENCY MEDICINE · 2000</text>
+          <!-- Sits at the axis origin, so the left-aligned label lines up with its own
+               tick. Centring this label clipped it off the left edge of the frame. -->
+          <line class="edge-soft" x1="10" y1="230" x2="10" y2="176"/>
+          <circle class="d-ink" cx="10" cy="230" r="7"/>
+          <text class="dMi" x="0" y="160">GCS 13 · HR 122 · open tibia</text>
+          <text class="dL" x="0" y="128">0:00 HANDOFF</text>
+        </g>
+        <g data-b>
+          <line class="edge-soft" x1="840" y1="230" x2="840" y2="286"/>
+          <circle class="d-ink" cx="840" cy="230" r="7"/>
+          <text class="dMi" x="840" y="314" text-anchor="middle">3 requests · 1 with nobody named</text>
+          <text class="dL" x="840" y="344" text-anchor="middle">0:28</text>
+        </g>
+        <g data-b>
+          <line class="edge-soft" x1="1018" y1="230" x2="1018" y2="186"/>
+          <circle class="d-ink" cx="1018" cy="230" r="7"/>
+          <text class="dM" x="1018" y="168" text-anchor="middle">“I’ve got ortho”</text>
+        </g>
+        <g data-b>
+          <line class="edge-hot" x1="1116" y1="230" x2="1116" y2="392"/>
+          <circle class="d-hot" cx="1116" cy="230" r="9"/>
+          <text class="dMh" x="1116" y="422" text-anchor="middle">severe penicillin allergy</text>
+          <text class="dL" x="1116" y="452" text-anchor="middle">0:38 · FROM THE MOTHER</text>
+        </g>
+        <g data-b>
+          <line class="edge-hot" x1="1434" y1="230" x2="1434" y2="176"/>
+          <circle class="d-hot" cx="1434" cy="230" r="9"/>
+          <text class="dMh" x="1434" y="160" text-anchor="middle">order: ampicillin-sulbactam</text>
+          <text class="dL" x="1434" y="128" text-anchor="middle">0:50</text>
         </g>
 
-        <g data-b data-fx="scale">
-          <rect class="box-hot" x="800" y="300" width="900" height="220" rx="18"/>
-          <text class="dL" x="836" y="348">ONE CASE, FIFTY-SEVEN SECONDS</text>
-          <circle class="d-hot" cx="846" cy="404" r="8"/>
-          <text class="dMi" x="874" y="412">0:38  severe penicillin allergy, from the mother</text>
-          <circle class="d-hot" cx="846" cy="470" r="8"/>
-          <text class="dMi" x="874" y="478">0:50  order: ampicillin-sulbactam</text>
-          <path class="edge-hot" d="M 846 416 V 458"/>
-          <rect x="1420" y="418" width="176" height="42" rx="21" fill="var(--bg)"/>
-          <text class="dMh" x="1508" y="446" text-anchor="middle">12 seconds</text>
+        <g data-b data-fx="fade">
+          <path class="edge-hot dash" d="M 1116 262 V 282 H 1434 V 262"/>
+          <rect x="1204" y="258" width="142" height="34" rx="17" fill="var(--bg)"/>
+          <text class="dMh" x="1275" y="284" text-anchor="middle">12 seconds</text>
+        </g>
+
+        <g data-b data-fx="fade">
+          <text class="dL" x="0" y="558">WHAT THE RECORD HELD</text>
+          <rect class="box-ghost" x="330" y="530" width="1360" height="60" rx="14"/>
+          <text class="dM" x="1010" y="568" text-anchor="middle">empty</text>
         </g>
       </svg>
     </div>
+  </section>
+
+  <!-- ══════════ 03 · statement ══════════ -->
+  <section class="s center">
+    <h2 class="t-big" data-b style="max-width:19ch">Spoken information<br>has no memory.</h2>
   </section>
 
   <!-- ══════════ 04 · three pillars ══════════ -->
@@ -340,6 +360,53 @@ em{font-style:italic;color:var(--ink)}
     </div>
   </section>
 
+  <!-- ══════════ 05 · the boundary ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">The line it does not cross</p>
+      <h2>It states. It never prescribes.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 580" role="img"
+           aria-label="A fact passes the boundary as a statement; a therapy recommendation is blocked by it">
+        <g data-b data-fx="fade">
+          <rect class="box-strong" x="0" y="212" width="290" height="118" rx="18"/>
+          <text class="dHs" x="32" y="262">a fact the room</text>
+          <text class="dHs" x="32" y="298">already established</text>
+        </g>
+
+        <g data-b data-fx="fade">
+          <line x1="770" y1="10" x2="770" y2="560" stroke="var(--ink)" stroke-width="3"/>
+          <text class="dL" x="792" y="28">THE BOUNDARY</text>
+        </g>
+
+        <path class="edge flow" d="M 290 271 C 450 271, 450 122, 960 122" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <g data-b>
+          <circle class="d-live" cx="770" cy="122" r="10"/>
+          <rect class="box" x="980" y="62" width="710" height="122" rx="16"/>
+          <text class="dMi" x="1012" y="110">“Ampicillin-sulbactam is a</text>
+          <text class="dMi" x="1012" y="142">penicillin-class antibacterial.”</text>
+          <text class="dL" x="980" y="216">STATES IT · NAMES THE SOURCE · STOPS</text>
+        </g>
+
+        <path class="edge-hot dash" d="M 290 271 C 450 271, 450 428, 740 428" data-b data-fx="fade"/>
+        <!-- The translate lives on an INNER g: [data-b] animates `transform`, and a
+             CSS transform overrides the SVG presentation attribute, which would
+             otherwise fling this marker to the origin the moment it builds in. -->
+        <g data-b><g transform="translate(770,428)">
+          <circle r="26" fill="var(--bg)" stroke="var(--accent)" stroke-width="3"/>
+          <path d="M -10 -10 L 10 10 M 10 -10 L -10 10" stroke="var(--accent)" stroke-width="3.4"/>
+        </g></g>
+        <g data-b data-fx="fade">
+          <rect class="box-ghost" x="980" y="378" width="710" height="100" rx="16"/>
+          <text class="dM" x="1012" y="424">“Give vancomycin instead.”</text>
+          <text class="dM" x="1012" y="456">a dose · an alternative · a plan</text>
+          <text class="dL" x="980" y="514">NEVER CROSSES</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
   <!-- ══════════ 06 · the loop ══════════ -->
   <section class="s mid">
     <div class="shead">
@@ -347,8 +414,8 @@ em{font-style:italic;color:var(--ink)}
       <h2>One loop, room to room.</h2>
     </div>
     <div class="canvas">
-      <svg viewBox="0 0 1700 800" role="img"
-           aria-label="A closed loop around the room, and beneath it the point-of-view camera path: frames buffer locally and exactly one reaches the model">
+      <svg viewBox="0 0 1700 640" role="img"
+           aria-label="A closed loop around the room: Deepgram in, Claude, Medplum, the RxNav gate, Deepgram out">
         <g data-b data-fx="scale">
           <rect class="box-strong" x="640" y="268" width="420" height="112" rx="56"/>
           <circle class="d-live breathe" cx="702" cy="324" r="9"/>
@@ -395,34 +462,6 @@ em{font-style:italic;color:var(--ink)}
           <text class="dL" x="1414" y="330">STRUCTURE</text>
           <text class="dL" x="1064" y="518">VERIFY</text>
           <text class="dL" x="330" y="408">SPEAK</text>
-        </g>
-
-        <!-- The camera path is its own strip rather than wired into the loop,
-             because that is exactly what it is: frames never enter the loop.
-             They sit locally, and precisely one is ever pulled back out. -->
-        <g data-b data-fx="fade">
-          <line class="edge-soft dash" x1="0" y1="646" x2="1700" y2="646"/>
-          <text class="dL" x="0" y="688">THE SECOND INPUT · NEVER STREAMED</text>
-        </g>
-        <g data-b>
-          <rect class="box" x="0" y="706" width="330" height="94" rx="16"/>
-          <text class="dHs" x="28" y="746">point-of-view camera</text>
-          <text class="dM" x="28" y="776">glasses or webcam</text>
-          <path class="edge" d="M 330 753 H 374" marker-end="url(#ah)"/>
-
-          <rect class="box" x="388" y="706" width="360" height="94" rx="16"/>
-          <text class="dHs" x="416" y="746">frame buffer</text>
-          <text class="dM" x="416" y="776">180 s, in memory, local</text>
-          <path class="edge" d="M 748 753 H 792" marker-end="url(#ah)"/>
-
-          <rect class="box-hot" x="806" y="706" width="464" height="94" rx="16"/>
-          <text class="dHs" x="834" y="746">one frame</text>
-          <text class="dMh" x="834" y="776">nearest the moment an alert fired</text>
-          <path class="edge-hot" d="M 1270 753 H 1314" marker-end="url(#ahc)"/>
-
-          <rect class="box" x="1328" y="706" width="372" height="94" rx="16"/>
-          <text class="dHs" x="1356" y="746">read once</text>
-          <text class="dM" x="1356" y="776">per alert, never per frame</text>
         </g>
       </svg>
     </div>
@@ -494,6 +533,98 @@ em{font-style:italic;color:var(--ink)}
           <rect class="box-ghost" x="0" y="448" width="880" height="76" rx="14"/>
           <text class="dL" x="30" y="482">NEGATIVE CONTROL</text>
           <text class="dM" x="30" y="512">clindamycin → Lincosamide → no match → correctly silent</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ══════════ 08 · two tiers ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">Two tiers</p>
+      <h2>Only one of them is allowed to raise its voice.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 560" role="img"
+           aria-label="Tier one is deterministic and may speak; tier two is advisory, read-only, and cannot escalate">
+        <g data-b>
+          <rect class="box-hot" x="0" y="40" width="760" height="220" rx="20"/>
+          <text class="dL" x="40" y="90">TIER 1 · DETERMINISTIC</text>
+          <text class="dH" x="40" y="146">allergy × order × FDA class</text>
+          <text class="dM" x="40" y="188">fires only on a real class match</text>
+          <text class="dM" x="40" y="220">cannot invent a conflict — it is not</text>
+          <text class="dM" x="40" y="246">the thing deciding one exists</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="0" y="300" width="760" height="220" rx="20"/>
+          <text class="dL" x="40" y="350">TIER 2 · ADVISORY</text>
+          <text class="dH" x="40" y="406">open-ended agent</text>
+          <text class="dM" x="40" y="448">for what no rule could enumerate</text>
+          <text class="dM" x="40" y="480">read-only · never writes the ledger</text>
+          <text class="dM" x="40" y="506">can never promote itself to critical</text>
+        </g>
+
+        <!-- This used to end at y=150, level with tier 1's own centre, which put the
+             arrowhead 32 units ABOVE the Aura box (y=182..378) — pointing at nothing.
+             It now curves down and lands inside the box's left edge. -->
+        <path class="edge-hot flow" d="M 760 150 C 920 150, 980 220, 1108 220" marker-end="url(#ahc)" data-b data-fx="fade"/>
+        <path class="edge-soft dash" d="M 760 410 C 900 410, 940 320, 1024 320" data-b data-fx="fade"/>
+        <g data-b data-fx="fade"><g transform="translate(1056,320)">
+          <circle r="22" fill="var(--bg)" stroke="var(--ink-3)" stroke-width="2.2"/>
+          <path d="M -8 -8 L 8 8 M 8 -8 L -8 8" stroke="var(--ink-3)" stroke-width="2.4"/>
+        </g></g>
+
+        <g data-b data-fx="scale">
+          <rect class="box-strong" x="1120" y="182" width="570" height="196" rx="20"/>
+          <text class="dL" x="1156" y="234">THE ONLY THING THAT SPEAKS</text>
+          <text class="dBig" x="1156" y="298">Aura-2</text>
+          <text class="dM" x="1156" y="342">queued by urgency, not arrival</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ══════════ 09 · one sentence, four resources ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">Grounded in Medplum</p>
+      <h2>One sentence becomes four resources.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 580" role="img"
+           aria-label="A spoken sentence decomposes into FHIR resources, each carrying provenance">
+        <g data-b data-fx="fade">
+          <rect class="box-strong" x="0" y="212" width="560" height="140" rx="18"/>
+          <text class="dHs" x="34" y="270">“Mom just told me she has a</text>
+          <text class="dHs" x="34" y="310">severe penicillin allergy.”</text>
+        </g>
+
+        <path class="edge" d="M 560 282 H 640" data-b data-fx="fade"/>
+        <path class="edge" d="M 640 78 V 486" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 640 78 H 760" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 640 214 H 760" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 640 350 H 760" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge-hot flow" d="M 640 486 H 760" marker-end="url(#ahc)" data-b data-fx="fade"/>
+
+        <g data-b>
+          <rect class="box" x="774" y="34" width="916" height="88" rx="16"/>
+          <text class="dMi" x="806" y="72">AllergyIntolerance.code</text>
+          <text class="dM" x="806" y="102">penicillin — stored bare, so a class lookup can match it</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="774" y="170" width="916" height="88" rx="16"/>
+          <text class="dMi" x="806" y="208">.reaction / .criticality</text>
+          <text class="dM" x="806" y="238">anaphylaxis · high — kept out of the substance field</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="774" y="306" width="916" height="88" rx="16"/>
+          <text class="dMi" x="806" y="344">Provenance.agent.who</text>
+          <text class="dM" x="806" y="374">the agent Device that asserted it</text>
+        </g>
+        <g data-b>
+          <rect class="box-hot" x="774" y="442" width="916" height="88" rx="16"/>
+          <text class="dMh" x="806" y="480">Provenance.agent.onBehalfOf</text>
+          <text class="dM" x="806" y="510">the mother is the source · the nurse is the relay</text>
         </g>
       </svg>
     </div>
@@ -573,6 +704,70 @@ em{font-style:italic;color:var(--ink)}
     </div>
   </section>
 
+  <!-- ══════════ 11 · unowned work — recreated product UI ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">The hard part</p>
+      <h2>Unowned work is a search, not a feature we invented.</h2>
+    </div>
+    <div class="canvas">
+      <div style="width:100%;max-width:1500px" data-b data-fx="scale">
+        <div class="app">
+          <div class="app-bar">
+            <span class="q">GET /Task?owner:missing=true&amp;status=ready</span>
+            <span class="n">MEDPLUM · FHIR R4</span>
+          </div>
+          <div class="trow">
+            <span class="task">Get ortho down here</span>
+            <span class="st">IN-PROGRESS</span>
+            <span class="own">owner · Nurse Okafor</span>
+          </div>
+          <div class="trow">
+            <span class="task">Repeat that pressure in five minutes</span>
+            <span class="st">READY</span>
+            <span class="own">owner · Nurse Okafor</span>
+          </div>
+          <div class="trow no-owner">
+            <span class="task">Determine anticoagulation status</span>
+            <span class="st">READY</span>
+            <span class="own">NO OWNER</span>
+          </div>
+          <!-- The exact question has an exact answer in FHIR. The fuzzy one
+               ("has anyone mentioned her mother?") does not, which is what the
+               semantic index is for. Medplum stays the source of truth. -->
+          <div class="app-bar" style="margin:22px 0 0">
+            <!-- Same blue as the FHIR query above: green is reserved for "listening"
+                 in this deck's system. The dashed border is what marks this lookup as
+                 the fuzzy one — it is an approximate match, not an exact search. -->
+            <span class="q" style="border-style:dashed">moss.dev &nbsp;“anything about her mother?”</span>
+            <span class="n">SEMANTIC RECALL · ACROSS EVERY CASE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 11 · the demo ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">Live demo</p>
+      <h2>Fifty-seven seconds, and the ledger holds.</h2>
+    </div>
+    <div class="canvas">
+      <div class="demo">
+        <div data-b data-fx="fade">
+          <svg viewBox="0 0 900 460" style="width:100%;height:auto" id="tlSvg" role="tablist" aria-label="Demo beats">
+            <g id="tlNodes"></g>
+          </svg>
+        </div>
+        <div data-b data-fx="scale">
+          <div class="screen" id="screen"></div>
+          <p class="said" id="said"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ══════════ 12 · close ══════════ -->
   <section class="s center">
     <h2 class="t-big" data-b style="max-width:18ch">It asks.<br>
@@ -598,34 +793,57 @@ em{font-style:italic;color:var(--ink)}
 <script>
 /* ══════════ SPEAKER NOTES ══════════ */
 const NOTES = [
-`<p><span class="beat">0:00 — 6s.</span> "OnCall listens to the room and keeps the record nobody has time to write."</p>
-<p>Do not read the sponsor line. Move.</p>`,
+`<p><span class="beat">Open cold, before the title lands.</span> "A trauma bay produces more facts per minute than any one person can hold."</p>
+<p>Then: <strong>OnCall listens to the room and keeps the record nobody has time to write.</strong></p>
+<p>Don't list the sponsors. They're on the slide.</p>`,
 
-`<p><span class="beat">0:06 — 16s. The only slide with numbers. Say them plainly.</span></p>
-<p>"Communication failure shows up in <strong>thirty percent of twenty-three thousand malpractice claims</strong> — seventeen hundred deaths, one point seven billion dollars. That is CRICO's data, not ours."</p>
-<p>"And an ED physician is interrupted <strong>nearly ten times an hour</strong>."</p>
-<p><span class="beat">Point right.</span> "Here is what that looks like. The mother gives a penicillin allergy at thirty-eight seconds. The order goes in at fifty. Twelve seconds."</p>`,
+`<p>Walk the axis left to right. Handoff, requests, someone claims one.</p>
+<p><span class="beat">Slow down at the two red marks.</span> The mother relays a penicillin allergy at 38 seconds. The order goes in at 50.</p>
+<p><span class="beat">Point at the empty box.</span> <strong>Both facts were in the room. Neither was anywhere a person could check.</strong> And the patient is confused — she can't give a history, so the room is the only record that exists.</p>`,
 
-`<p><span class="beat">0:22 — 12s.</span> "Three things, and deliberately nothing else."</p>
-<p>"Every fact said out loud. Every request said out loud. And a spoken catch-up for whoever walks in cold."</p>
-<p><span class="beat">If you have a spare second:</span> when nobody is named, we leave the owner off rather than guess it.</p>`,
+`<p><span class="beat">Read it, then stop talking.</span></p>
+<p>If someone pushes on it: this isn't a competence problem. Nobody failed here.</p>`,
 
-`<p><span class="beat">0:34 — 20s. The architecture. Trace the loop with your hand.</span></p>
-<p>"Deepgram in, Claude structures it, Medplum stores it, RxNav verifies before anything is ever spoken back."</p>
-<p><span class="beat">Then drop to the strip.</span> "The glasses camera is the second input, and it is <strong>never streamed to a model</strong>. Frames sit in a local buffer. When an alert fires we pull the single frame nearest that moment — because by then the room has already moved on, and nobody narrates a glance at a monitor."</p>
-<p><strong>One vision call per alert, not one per frame.</strong> That is the whole privacy and cost argument in one sentence.</p>`,
+`<p>Three things, and deliberately nothing else.</p>
+<p><span class="beat">Point at the middle row.</span> When nobody is named, we leave the owner off rather than guessing it from whoever happened to be speaking. <strong>A wrong owner is worse than no owner — it stops anyone else from picking it up.</strong></p>
+<p>Voice in, voice out. Nobody stops to type.</p>`,
 
-`<p><span class="beat">0:54 — 16s. Let the top track run and fail before you speak.</span></p>
-<p>"Ampicillin-sulbactam shares no substring with penicillin. A keyword matcher finds nothing."</p>
-<p><span class="beat">Then the bottom.</span> "RxNav resolves it to a penicillin-class antibacterial. That is a real match, so it speaks — once."</p>
-<p>"Clindamycin resolves to a lincosamide, no match, stays quiet. It is not alerting on everything."</p>`,
+`<p>This is the slide that gets asked about, so land it deliberately.</p>
+<p><span class="beat">Trace the top path.</span> It states the fact and names the source. <span class="beat">Then the blocked one.</span> <strong>It never recommends a therapy.</strong></p>
+<p>Why: software that recommends therapy is a different regulatory and liability object than software that surfaces something a clinician can independently review. And the second is the honest description of what a language model is reliably good at.</p>
+<p>If pressed: tests/test_ledger.py asserts the boundary, so it can't quietly drift back.</p>`,
 
-`<p><span class="beat">1:10 — 14s.</span> "None of this is a schema we invented."</p>
-<p>"Observation, AllergyIntolerance, MedicationRequest, Task — <strong>FHIR already defines every one, and Medplum already stores and searches them.</strong>"</p>
-<p><span class="beat">Point at Task.</span> "Owner is left off when nobody is named, so unowned work is a standard FHIR search rather than a flag we maintain."</p>`,
+`<p>One loop. Speech in at the top left, structure across the top, verify at the bottom, speak back into the room.</p>
+<p><span class="beat">Point at the gate.</span> Nothing reaches the speaker without passing RxNav first.</p>
+<p>Two things hang off this that aren't drawn: a point-of-view camera frame that informs context but never writes a clinical value, and a watchdog on a timer that chases unowned work when nobody is speaking.</p>`,
 
-`<p><span class="beat">1:24 — 6s. Read it and stop.</span></p>
-<p>Leave it up. If there is one question you want, it is about the boundary — it states facts and never recommends therapy.</p>`
+`<p><span class="beat">Let the top track run and fail before you say anything.</span></p>
+<p>"Ampicillin-sulbactam" shares no substring with "penicillin". A keyword matcher finds nothing and stays silent.</p>
+<p><span class="beat">Then the bottom track.</span> RxNav resolves it to RxCUI 1009148, FDA class: Penicillin-class Antibacterial. <strong>That's a real match, so it speaks — once.</strong></p>
+<p>The negative control matters as much: clindamycin resolves to Lincosamide, no match, stays quiet. It isn't just alerting on everything.</p>`,
+
+`<p>Two tiers, and the asymmetry is the safety property.</p>
+<p><span class="beat">Point at the blocked arrow.</span> <strong>Tier 2 can notice things, but it can never make itself critical.</strong> The only thing that reaches the room at critical urgency came through a deterministic, externally verified check.</p>`,
+
+`<p>Every fact lands as real FHIR, not a JSON blob.</p>
+<p><span class="beat">Point at the bottom row.</span> The mother stays the source, the nurse stays the relay. <strong>That's what lets a clinician review the basis instead of trusting us.</strong></p>
+<p>Note the top row too: the substance is stored bare, with reaction and severity in separate fields. That's what makes the class lookup on the next slide possible at all.</p>`,
+
+`<p>Widen out from that one sentence to the whole case.</p>
+<p><span class="beat">Sweep the middle row.</span> Observation, AllergyIntolerance, MedicationRequest, Task. <strong>Not one of these is a table we designed — FHIR already defines every one of them, and Medplum already stores and searches them.</strong></p>
+<p><span class="beat">Point at Task, on the right.</span> When nobody is named, owner is left off the resource entirely rather than set to whoever happened to be talking. That single decision is what makes the next slide work.</p>
+<p>And the bottom: every resource carries a Provenance, so nothing here is an assertion you have to take on trust.</p>`,
+
+`<p>This is the payoff for modelling it properly.</p>
+<p><span class="beat">Read the query out loud.</span> owner:missing=true is a standard FHIR search modifier. <strong>We didn't invent an "unowned" flag and we don't maintain one.</strong></p>
+<p>The watchdog runs that query on a timer and asks the room about whatever comes back.</p>`,
+
+`<p><span class="beat">Click the beats in order.</span> Fill the ledger, disturb it, drain it.</p>
+<p>Land on the conflict beat. Twelve seconds between the allergy and the order.</p>
+<p>Then the last beat: someone who wasn't in the room asks once and gets it back in about twenty seconds.</p>`,
+
+`<p><span class="beat">Read it, then stop.</span> Leave it up for questions.</p>
+<p>If you only get one line in: <strong>it asks, it never assigns, and it never advises.</strong></p>`
 ];
 
 /* ══════════ nav ══════════ */
