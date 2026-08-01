@@ -40,7 +40,7 @@ export default function CaseSession({ caseId, active, onAgentStep }) {
       {alerts.length > 0 && (
         <div className="alert-stack">
           {alerts.map((a) => (
-            <div className="alert-banner" key={a.id}>
+            <div className={`alert-banner urgency-${a.urgency || 'critical'}`} key={a.id}>
               ⚠️ {a.text}
             </div>
           ))}

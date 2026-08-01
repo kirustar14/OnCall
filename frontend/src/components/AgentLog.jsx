@@ -3,17 +3,28 @@ const STEP_LABEL = {
   tool_call: 'Tool call',
   tool_result: 'Tool result',
   decision: 'Decision',
+  answer: 'Answer',
 };
+
+function stepLabel(step) {
+  if (step.step === 'trigger' && step.kind === 'query') return 'Query';
+  return STEP_LABEL[step.step] || step.step;
+}
 
 function formatTime(ts) {
   if (!ts) return '';
   return new Date(ts * 1000).toLocaleTimeString([], { hour12: false });
 }
 
+function UrgencyTag({ urgency }) {
+  if (!urgency) return null;
+  return <span className={`urgency-tag urgency-${urgency}`}>{urgency}</span>;
+}
+
 function StepBody({ step }) {
   switch (step.step) {
     case 'trigger':
-      return <span>New fact: {step.text}</span>;
+      return <span>{step.text}</span>;
     case 'tool_call':
       return (
         <span>
@@ -31,11 +42,20 @@ function StepBody({ step }) {
       return (
         <span>
           <strong>{step.action_needed ? 'Action needed' : 'No action needed'}</strong>
+          {step.action_needed ? <UrgencyTag urgency={step.urgency} /> : null}
           {' — '}
           {step.reasoning}
           {step.action_needed && step.alert_text ? (
             <div className="agent-log-spoken">🔊 "{step.alert_text}"</div>
           ) : null}
+        </span>
+      );
+    case 'answer':
+      return (
+        <span>
+          <strong>Answer</strong>
+          <UrgencyTag urgency={step.urgency} />
+          <div className="agent-log-spoken">🔊 "{step.text}"</div>
         </span>
       );
     default:
@@ -62,7 +82,9 @@ export default function AgentLog({ steps }) {
             <div className="agent-log-meta">
               <span className="agent-log-time">{formatTime(step.timestamp)}</span>
               <span className="agent-log-case">Case {step.case_id?.slice(0, 8)}</span>
-              <span className={`agent-log-badge badge-${step.step}`}>{STEP_LABEL[step.step] || step.step}</span>
+              <span className={`agent-log-badge badge-${step.step === 'trigger' && step.kind === 'query' ? 'query' : step.step}`}>
+                {stepLabel(step)}
+              </span>
             </div>
             <div className="agent-log-body">
               <StepBody step={step} />

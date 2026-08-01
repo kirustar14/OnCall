@@ -1,9 +1,20 @@
 """In-memory store of all case state. Simple dict — no DB, per hackathon spec."""
 
+import itertools
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
+
+# Global, monotonically increasing sequence for every spoken alert (proactive
+# decisions AND query answers), across every case. This is the tie-breaker the
+# frontend's spoken-alert priority queue uses for "earlier-triggered first"
+# ordering — more reliable than comparing float timestamps.
+_alert_seq_counter = itertools.count()
+
+
+def next_alert_seq() -> int:
+    return next(_alert_seq_counter)
 
 
 @dataclass
@@ -20,6 +31,8 @@ class Alert:
     text: str
     reasoning: str
     timestamp: float
+    seq: int
+    urgency: str = "advisory"  # "critical" | "advisory" | "informational"
 
 
 @dataclass
@@ -73,7 +86,9 @@ class CaseState:
                     "id": a.id,
                     "text": a.text,
                     "reasoning": a.reasoning,
+                    "urgency": a.urgency,
                     "timestamp": a.timestamp,
+                    "seq": a.seq,
                 }
                 for a in self.alerts
             ],

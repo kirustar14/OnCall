@@ -9,13 +9,12 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.agent import make_alert, run_agent_step
-from app.case_store import CaseState, TranscriptEntry, store
+from app.agent import make_alert, run_agent_step, run_query_step
+from app.case_store import Alert, CaseState, TranscriptEntry, next_alert_seq, store
 from app.deepgram_stt import DeepgramSTTSession
 from app.deepgram_tts import synthesize_speech
 from app.extraction import run_extraction_and_persist
 from app.medplum_client import medplum_client
-from app.query import answer_question
 from app.ws_manager import ws_manager
 
 logging.basicConfig(level=logging.INFO)
@@ -94,11 +93,34 @@ class QueryRequest(BaseModel):
 
 @app.post("/api/query")
 async def query_case(req: QueryRequest):
+    """Hands-free/typed query box — genuinely agentic: Claude decides for itself
+    whether it can answer from the case data or needs web_search / patient history
+    first, exactly like the proactive intervention agent. Logged the same way to the
+    Agent Log, and the answer is queued for spoken playback (as an "advisory"-urgency
+    item) alongside proactive alerts, not just returned as text."""
     case = store.get(req.case_id)
     if case is None:
         return {"answer": f"No such case: {req.case_id}"}
-    answer = await answer_question(case, req.question)
-    return {"answer": answer}
+
+    try:
+        result = await run_query_step(case, req.question, on_step=lambda s: _emit_agent_step(case, s))
+    except Exception:
+        logger.exception("query agent step failed for case %s", case.case_id)
+        return {"answer": "Something went wrong answering that question."}
+
+    answer_text = result.get("answer", "")
+
+    alert = Alert(
+        id=str(uuid.uuid4()),
+        text=answer_text,
+        reasoning=f"Answered clinician query: {req.question}",
+        urgency="advisory",
+        timestamp=time.time(),
+        seq=next_alert_seq(),
+    )
+    await _speak_alert(case, alert)
+
+    return {"answer": answer_text}
 
 
 def _structured_payload(case: CaseState) -> dict:
@@ -119,6 +141,39 @@ async def _emit_agent_step(case: CaseState, step: dict) -> None:
     step_with_meta = {"id": str(uuid.uuid4()), "case_id": case.case_id, "timestamp": time.time(), **step}
     case.agent_steps.append(step_with_meta)
     await ws_manager.send_json(case.case_id, {"type": "agent_step", **step_with_meta})
+
+
+async def _speak_alert(case: CaseState, alert: Alert) -> None:
+    """Record the alert, synthesize TTS, and push it over the case's WS. The banner
+    (visual) shows up immediately on the frontend regardless of audio — the frontend's
+    spoken-alert priority queue is what actually serializes playback (urgency + seq
+    order), not this function; this just hands one alert off."""
+    case.alerts.append(alert)
+
+    audio_b64 = None
+    try:
+        audio_bytes = await synthesize_speech(alert.text)
+        if audio_bytes:
+            audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+    except Exception:
+        logger.exception("TTS failed for case %s", case.case_id)
+
+    await ws_manager.send_json(
+        case.case_id,
+        {
+            "type": "alert",
+            "alert": {
+                "id": alert.id,
+                "text": alert.text,
+                "reasoning": alert.reasoning,
+                "urgency": alert.urgency,
+                "timestamp": alert.timestamp,
+                "seq": alert.seq,
+            },
+            "audio_b64": audio_b64,
+            "audio_mime": "audio/mpeg",
+        },
+    )
 
 
 async def _handle_finalized_segment(case: CaseState, segment: str) -> None:
@@ -147,31 +202,7 @@ async def _handle_finalized_segment(case: CaseState, segment: str) -> None:
     if not decision.get("action_needed") or not decision.get("alert_text"):
         return
 
-    alert = make_alert(decision)
-    case.alerts.append(alert)
-
-    audio_b64 = None
-    try:
-        audio_bytes = await synthesize_speech(alert.text)
-        if audio_bytes:
-            audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
-    except Exception:
-        logger.exception("TTS failed for case %s", case.case_id)
-
-    await ws_manager.send_json(
-        case.case_id,
-        {
-            "type": "alert",
-            "alert": {
-                "id": alert.id,
-                "text": alert.text,
-                "reasoning": alert.reasoning,
-                "timestamp": alert.timestamp,
-            },
-            "audio_b64": audio_b64,
-            "audio_mime": "audio/mpeg",
-        },
-    )
+    await _speak_alert(case, make_alert(decision))
 
 
 @app.websocket("/ws/case/{case_id}")

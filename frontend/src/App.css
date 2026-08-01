@@ -18,12 +18,22 @@
   --color-accent-connecting: #c9932a;
   --color-accent-error: #b3261e;
   --color-accent-gold: #c9a227;
+  --color-accent-query: #4a5c8c;
 
   /* Alerts are the one deliberate exception to the muted palette —
-     safety-critical, must read as urgent. */
+     safety-critical, must read as urgent. Urgency-scoped variants below
+     step down in intensity from critical -> advisory -> informational,
+     but all three stay solid/high-contrast (this is not the place to be
+     quiet — see .alert-banner.urgency-*). */
   --color-alert-bg: #b3261e;
   --color-alert-border: #7a1712;
   --color-alert-text: #ffffff;
+
+  --color-alert-advisory-bg: #a9760f;
+  --color-alert-advisory-border: #7a5709;
+
+  --color-alert-informational-bg: #3d4f61;
+  --color-alert-informational-border: #2a3946;
 
   --font-serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, Helvetica, Arial,
@@ -181,6 +191,20 @@ body {
   font-weight: 600;
   font-size: 14px;
   box-shadow: 0 2px 8px rgba(179, 38, 30, 0.25);
+}
+
+/* Urgency steps the banner down in intensity, but never into the quiet palette —
+   these are the one place breaking from the muted look is correct. */
+.alert-banner.urgency-advisory {
+  background: var(--color-alert-advisory-bg);
+  border-color: var(--color-alert-advisory-border);
+  box-shadow: 0 2px 8px rgba(169, 118, 15, 0.25);
+}
+
+.alert-banner.urgency-informational {
+  background: var(--color-alert-informational-bg);
+  border-color: var(--color-alert-informational-border);
+  box-shadow: 0 2px 8px rgba(61, 79, 97, 0.25);
 }
 
 .case-session-grid {
@@ -511,6 +535,44 @@ body {
 .badge-decision {
   color: var(--color-accent-live);
   border-color: var(--color-accent-live);
+}
+
+.badge-query {
+  color: var(--color-accent-query);
+  border-color: var(--color-accent-query);
+}
+
+.badge-answer {
+  color: var(--color-accent-live);
+  border-color: var(--color-accent-live);
+}
+
+.urgency-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  vertical-align: middle;
+}
+
+.urgency-tag.urgency-critical {
+  background: var(--color-alert-bg);
+  color: #ffffff;
+}
+
+.urgency-tag.urgency-advisory {
+  background: var(--color-alert-advisory-bg);
+  color: #ffffff;
+}
+
+.urgency-tag.urgency-informational {
+  background: var(--color-bg-recessed);
+  color: var(--color-text-label);
+  border: 1px solid var(--color-border);
 }
 
 .agent-log-body {

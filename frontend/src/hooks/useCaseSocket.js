@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startAudioCapture, stopAudioCapture } from '../lib/audioCapture';
+import { enqueueAlert } from '../lib/audioQueue';
 
 const WS_BASE = import.meta.env.VITE_WS_BASE || `ws://${window.location.hostname}:8000`;
 
@@ -22,29 +23,22 @@ export function useCaseSocket(caseId, onAgentStep) {
   const wsRef = useRef(null);
   const audioCaptureRef = useRef(null);
   const mediaStreamRef = useRef(null);
-  // Kept in a ref (not a dependency) so a new onAgentStep identity from the parent
-  // doesn't tear down and reconnect the WebSocket/audio capture.
+  // Kept in refs (not dependencies) so a new onAgentStep identity, or a status
+  // change, doesn't tear down and reconnect the WebSocket/audio capture. statusRef
+  // gives handleMessage a live read of the current status for the audio queue's
+  // open-case-wins tiebreak, without making the connect effect depend on status.
   const onAgentStepRef = useRef(onAgentStep);
   useEffect(() => {
     onAgentStepRef.current = onAgentStep;
   }, [onAgentStep]);
 
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
   useEffect(() => {
     let cancelled = false;
-
-    function playBase64Audio(b64, mime) {
-      try {
-        const byteChars = atob(b64);
-        const byteNumbers = new Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-        const blob = new Blob([new Uint8Array(byteNumbers)], { type: mime });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.play().catch((e) => console.warn('alert audio playback blocked', e));
-      } catch (err) {
-        console.warn('failed to decode/play alert audio', err);
-      }
-    }
 
     function handleMessage(msg) {
       if (msg.type === 'transcript') {
@@ -57,8 +51,19 @@ export function useCaseSocket(caseId, onAgentStep) {
       } else if (msg.type === 'case_data') {
         setStructured(msg.data);
       } else if (msg.type === 'alert') {
+        // Visual always shows immediately — only the spoken audio is serialized
+        // through the priority queue.
         setAlerts((prev) => [...prev, msg.alert]);
-        if (msg.audio_b64) playBase64Audio(msg.audio_b64, msg.audio_mime || 'audio/mpeg');
+        enqueueAlert({
+          id: msg.alert.id,
+          caseId,
+          caseStatus: statusRef.current,
+          urgency: msg.alert.urgency,
+          seq: msg.alert.seq,
+          timestamp: msg.alert.timestamp,
+          audioB64: msg.audio_b64,
+          audioMime: msg.audio_mime,
+        });
       } else if (msg.type === 'agent_step') {
         onAgentStepRef.current?.(msg);
       } else if (msg.type === 'status' && msg.status === 'closed') {
