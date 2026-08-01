@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Servare — the record the room can't keep</title>
+<style>
+/* ---------------------------------------------------------------------
+   Tokens inherited from frontend/src/App.css so the deck reads as the
+   same object as the product. Extended only where a presentation needs
+   things the app does not have (stage sizing, rail, slide motion).
+   ------------------------------------------------------------------- */
+:root {
+  --bg: #faf9f6;
+  --bg-card: #ffffff;
+  --bg-recessed: #f5f4ef;
+  --border: #e4e1d8;
+  --border-strong: #1a1a18;
+
+  --ink: #1a1a18;
+  --muted: #8c8878;
+  --label: #9b9686;
+
+  --live: #2f9e4f;
+  --advisory: #a9760f;
+  --critical: #b3261e;
+  --query: #4a5c8c;
+  --gold: #c9a227;
+
+  --font-serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  --radius-sm: 8px;
+  --shadow-card: 0 1px 2px rgba(20, 18, 12, 0.04);
+
+  --pad: clamp(28px, 4.5vw, 84px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141311;
+    --bg-card: #1c1b18;
+    --bg-recessed: #100f0d;
+    --border: #302e29;
+    --border-strong: #f2efe6;
+    --ink: #f2efe6;
+    --muted: #97917f;
+    --label: #7d7869;
+    --live: #4cb96b;
+    --advisory: #d19b34;
+    --critical: #e05a4f;
+    --query: #7d90c4;
+    --gold: #dcb948;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* The viewer's toggle must beat the media query in both directions. */
+:root[data-theme="light"] {
+  --bg: #faf9f6; --bg-card: #ffffff; --bg-recessed: #f5f4ef;
+  --border: #e4e1d8; --border-strong: #1a1a18;
+  --ink: #1a1a18; --muted: #8c8878; --label: #9b9686;
+  --live: #2f9e4f; --advisory: #a9760f; --critical: #b3261e;
+  --query: #4a5c8c; --gold: #c9a227;
+  --shadow-card: 0 1px 2px rgba(20, 18, 12, 0.04);
+}
+:root[data-theme="dark"] {
+  --bg: #141311; --bg-card: #1c1b18; --bg-recessed: #100f0d;
+  --border: #302e29; --border-strong: #f2efe6;
+  --ink: #f2efe6; --muted: #97917f; --label: #7d7869;
+  --live: #4cb96b; --advisory: #d19b34; --critical: #e05a4f;
+  --query: #7d90c4; --gold: #dcb948;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--query);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+/* ---- stage ---------------------------------------------------------- */
+
+.stage { position: relative; height: 100%; width: 100%; }
+
+.slide {
+  position: absolute;
+  inset: 0;
+  padding: var(--pad);
+  padding-left: calc(var(--pad) + 26px);
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.slide.is-active { display: flex; animation: rise 0.42s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.inner { width: 100%; max-width: 1180px; margin: 0 auto; }
+
+/* ---- shared type ---------------------------------------------------- */
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--label);
+  margin: 0 0 20px;
+}
+
+h1, h2 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  text-wrap: balance;
+  margin: 0;
+  letter-spacing: -0.012em;
+}
+h1 { font-size: clamp(46px, 7.4vw, 104px); line-height: 1.02; }
+h2 { font-size: clamp(30px, 3.9vw, 54px); line-height: 1.12; }
+
+.lede {
+  font-family: var(--font-serif);
+  font-size: clamp(18px, 1.65vw, 24px);
+  line-height: 1.5;
+  color: var(--ink);
+  max-width: 62ch;
+  text-wrap: pretty;
+}
+.sub {
+  font-size: clamp(14px, 1.15vw, 17px);
+  line-height: 1.62;
+  color: var(--muted);
+  max-width: 66ch;
+  text-wrap: pretty;
+}
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* A said-aloud line. Serif, because it came from a person. */
+.said {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--ink);
+}
+
+/* A machine artifact. Mono, because the system made it. */
+.artifact {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  color: var(--query);
+}
+
+.rule { height: 1px; background: var(--border); border: 0; margin: 0; }
+
+/* ---- rail ----------------------------------------------------------- */
+
+.rail {
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: 26px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 9px;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  z-index: 40;
+}
+.rail button {
+  width: 5px; height: 5px; padding: 0;
+  border: 0; border-radius: var(--radius-pill);
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.2s, height 0.2s;
+}
+.rail button:hover { background: var(--muted); }
+.rail button[aria-current="true"] { background: var(--ink); height: 20px; }
+
+/* ---- chrome --------------------------------------------------------- */
+
+.chrome {
+  position: fixed;
+  right: var(--pad); bottom: 22px;
+  display: flex; align-items: center; gap: 14px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--label); letter-spacing: 0.06em;
+  z-index: 40;
+}
+.chrome button {
+  font: inherit; letter-spacing: inherit;
+  color: var(--muted);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.chrome button:hover { border-color: var(--muted); color: var(--ink); }
+.counter { font-variant-numeric: tabular-nums; }
+
+/* ---- cards ---------------------------------------------------------- */
+
+.grid { display: grid; gap: 16px; }
+.g3 { grid-template-columns: repeat(3, 1fr); }
+.g2 { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 900px) { .g3, .g2 { grid-template-columns: 1fr; } }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 22px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.card h3 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 25px;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.card p { margin: 0; font-size: 14.5px; line-height: 1.58; color: var(--muted); }
+.card .artifact { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+
+.tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: var(--radius-pill);
+  border: 1px solid currentColor;
+  align-self: flex-start;
+}
+.t-critical { color: var(--critical); }
+.t-advisory { color: var(--advisory); }
+.t-live { color: var(--live); }
+.t-muted { color: var(--label); }
+
+/* ---- slide 1 -------------------------------------------------------- */
+
+.title-wrap { display: flex; flex-direction: column; gap: 26px; }
+.wordmark { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+.gloss {
+  font-family: var(--font-serif); font-style: italic;
+  font-size: clamp(15px, 1.3vw, 19px); color: var(--muted);
+}
+.title-foot {
+  display: flex; gap: 10px 22px; flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.09em; color: var(--label);
+  text-transform: uppercase;
+}
+
+/* listening indicator */
+.listening { display: inline-flex; align-items: center; gap: 8px; color: var(--live); }
+.pulse {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2.2s ease-in-out infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+/* ---- pipeline (slide 5) --------------------------------------------- */
+
+.pipe { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.stage-btn {
+  flex: 1 1 0; min-width: 148px;
+  text-align: left;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-right-width: 0;
+  padding: 18px 16px;
+  cursor: pointer;
+  font: inherit; color: inherit;
+  display: flex; flex-direction: column; gap: 7px;
+  transition: background 0.18s, border-color 0.18s;
+}
+.stage-btn:first-child { border-radius: var(--radius-card) 0 0 var(--radius-card); }
+.stage-btn:last-child { border-radius: 0 var(--radius-card) var(--radius-card) 0; border-right-width: 1px; }
+.stage-btn:hover { background: var(--bg-recessed); }
+.stage-btn[aria-selected="true"] { background: var(--bg-recessed); border-color: var(--border-strong); border-right-width: 1px; }
+.stage-btn[aria-selected="true"] + .stage-btn { border-left-width: 0; }
+.stage-n {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.12em; color: var(--label);
+}
+.stage-name { font-family: var(--font-serif); font-size: 18.5px; line-height: 1.22; }
+.stage-sub { font-family: var(--font-mono); font-size: 11px; color: var(--muted); line-height: 1.45; }
+
+.stage-detail {
+  margin-top: 16px;
+  background: var(--bg-recessed);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 22px;
+  min-height: 132px;
+}
+.stage-detail p { margin: 0 0 10px; font-size: 15px; line-height: 1.6; max-width: 74ch; }
+.stage-detail p:last-child { margin-bottom: 0; }
+
+.branches { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+.branch {
+  display: flex; gap: 12px; align-items: baseline;
+  font-size: 14px; color: var(--muted); line-height: 1.5;
+}
+.branch .mono { color: var(--label); font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; white-space: nowrap; }
+
+/* ---- conflict (slide 6) --------------------------------------------- */
+
+.verdict {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg-card);
+  padding: 22px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.verdict.miss { border-color: var(--border); }
+.verdict.hit { border-color: var(--critical); }
+.chain { display: flex; flex-direction: column; gap: 7px; }
+.chain-row {
+  font-family: var(--font-mono); font-size: 12.5px;
+  display: flex; gap: 9px; align-items: baseline;
+  opacity: 0; transform: translateX(-6px);
+}
+.chain-row.shown { opacity: 1; transform: none; transition: opacity 0.3s, transform 0.3s; }
+.chain-row .arrow { color: var(--label); }
+.outcome { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+.outcome.miss { color: var(--muted); }
+.outcome.hit { color: var(--critical); }
+
+.tiers { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+@media (max-width: 900px) { .tiers { grid-template-columns: 1fr; } }
+
+/* ---- table (slide 7) ------------------------------------------------- */
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg-card); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 11px 18px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th {
+  font-family: var(--font-mono); font-size: 10.5px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--label); font-weight: 400;
+}
+td.fhir { font-family: var(--font-mono); font-size: 12.5px; color: var(--query); white-space: nowrap; }
+tr.spot td { background: var(--bg-recessed); }
+tr.spot td.fhir { color: var(--critical); }
+
+/* ---- stack (slide 8) ------------------------------------------------- */
+
+.stackrow {
+  display: grid; grid-template-columns: 190px 1fr;
+  gap: 22px; padding: 18px 0; border-bottom: 1px solid var(--border);
+  align-items: baseline;
+}
+.stackrow:last-child { border-bottom: 0; }
+@media (max-width: 780px) { .stackrow { grid-template-columns: 1fr; gap: 6px; } }
+.stackrow h3 { font-family: var(--font-serif); font-weight: 400; font-size: 23px; margin: 0; }
+.stackrow p { margin: 0 0 7px; font-size: 14.5px; line-height: 1.6; color: var(--ink); max-width: 72ch; }
+.stackrow .artifact { color: var(--label); }
+
+/* ---- timeline (slide 9) --------------------------------------------- */
+
+.tl { display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: start; }
+@media (max-width: 980px) { .tl { grid-template-columns: 1fr; } }
+
+.beats { display: flex; flex-direction: column; border-left: 1px solid var(--border); }
+.beat {
+  position: relative;
+  text-align: left; font: inherit; color: inherit;
+  background: none; border: 0; border-bottom: 1px solid var(--border);
+  padding: 11px 14px 11px 20px;
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.beat:last-child { border-bottom: 0; }
+.beat::before {
+  content: ""; position: absolute; left: -3.5px; top: 17px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--border);
+}
+.beat:hover { background: var(--bg-recessed); }
+.beat[aria-selected="true"] { background: var(--bg-recessed); }
+.beat[aria-selected="true"]::before { background: var(--ink); }
+.beat.is-critical[aria-selected="true"]::before { background: var(--critical); }
+.beat-t { font-family: var(--font-mono); font-size: 10.5px; color: var(--label); letter-spacing: 0.07em; font-variant-numeric: tabular-nums; }
+.beat-name { font-size: 14px; line-height: 1.35; }
+
+.viewer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg-card);
+  overflow: hidden;
+}
+.screen {
+  aspect-ratio: 16 / 10;
+  background: var(--bg-recessed);
+  display: flex; align-items: center; justify-content: center;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.screen video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+.slot {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  color: var(--label); text-align: center; padding: 24px;
+}
+.slot .filename {
+  font-family: var(--font-mono); font-size: 12.5px;
+  color: var(--ink); background: var(--bg);
+  border: 1px dashed var(--border); border-radius: var(--radius-sm);
+  padding: 7px 13px;
+}
+.slot .hint { font-size: 12px; max-width: 40ch; line-height: 1.5; }
+.viewer-body { padding: 20px 22px; display: flex; flex-direction: column; gap: 11px; min-height: 152px; }
+.viewer-body .said { font-size: 17px; line-height: 1.48; }
+.viewer-body .note { font-size: 13.5px; line-height: 1.55; color: var(--muted); margin: 0; }
+
+/* ---- close (slide 10) ------------------------------------------------ */
+
+.close-lines { display: flex; flex-direction: column; gap: 4px; }
+.close-lines span { font-family: var(--font-serif); font-size: clamp(30px, 4.6vw, 62px); line-height: 1.14; }
+.close-lines span:nth-child(2) { color: var(--muted); }
+.close-lines span:nth-child(3) { color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .chain-row { opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+
+<nav class="rail" id="rail" aria-label="Slides"></nav>
+
+<div class="stage" id="stage">
+
+  <!-- 1 ---------------------------------------------------------------->
+  <section class="slide" data-title="Servare">
+    <div class="inner title-wrap">
+      <p class="eyebrow"><span class="listening"><span class="pulse"></span>Listening</span></p>
+      <div class="wordmark">
+        <h1>Servare</h1>
+        <span class="gloss">serv&#257;re &mdash; to keep, to preserve, to watch over</span>
+      </div>
+      <p class="lede">
+        Listens to the room, keeps the record nobody has time to write,
+        and speaks up only when the room contradicts itself.
+      </p>
+      <hr class="rule" />
+      <div class="title-foot">
+        <span>YC &times; Medplum Agentic Healthcare Hackathon</span>
+        <span>Deepgram</span>
+        <span>Medplum</span>
+        <span>Claude Opus 5</span>
+        <span>NIH RxNav</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 ---------------------------------------------------------------->
+  <section class="slide" data-title="The problem">
+    <div class="inner">
+      <p class="eyebrow">The problem</p>
+      <h2>Spoken information has no memory.</h2>
+      <p class="sub" style="margin: 18px 0 30px;">
+        A trauma bay produces more facts per minute than any one person can hold, and almost none
+        of them get written down while they still matter. The failure is not skill.
+      </p>
+      <div class="grid g3">
+        <article class="card">
+          <span class="tag t-muted">Said once</span>
+          <h3>A detail, at 2am</h3>
+          <p>The mother mentions a severe penicillin allergy. Twelve seconds later somebody orders
+             a penicillin-class antibiotic. Both facts were in the room. Neither was in the chart.</p>
+          <p class="artifact">AllergyIntolerance &middot; never written</p>
+        </article>
+        <article class="card">
+          <span class="tag t-muted">No ticket</span>
+          <h3>A task, handed out by voice</h3>
+          <p>&ldquo;Someone find out whether she&rsquo;s anticoagulated.&rdquo; No name attached, no
+             system holding it, and no one notices when the answer never comes back.</p>
+          <p class="artifact">Task &middot; no owner &middot; no follow-up</p>
+        </article>
+        <article class="card">
+          <span class="tag t-muted">Not in the room</span>
+          <h3>An hour of context</h3>
+          <p>The person arriving at shift change was not there for any of it, and the patient is
+             confused and cannot give a history. The room is the only record that exists.</p>
+          <p class="artifact">Encounter &middot; unreconstructable</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 ---------------------------------------------------------------->
+  <section class="slide" data-title="Details, tasks, context">
+    <div class="inner">
+      <p class="eyebrow">What it does</p>
+      <h2>Details. Tasks. Context.</h2>
+      <p class="sub" style="margin: 18px 0 30px;">
+        Three things, and deliberately nothing else. Voice in, voice out &mdash; nobody stops to
+        type, and there is no screen anyone has to look at.
+      </p>
+      <div class="grid g3">
+        <article class="card">
+          <span class="tag t-live">Details</span>
+          <h3>Every fact said out loud</h3>
+          <p>Becomes a structured FHIR resource carrying the exact quote and who said it, so the
+             basis is inspectable rather than trusted.</p>
+          <p class="artifact">Observation &middot; AllergyIntolerance &middot; MedicationRequest</p>
+        </article>
+        <article class="card">
+          <span class="tag t-live">Tasks</span>
+          <h3>Every request said out loud</h3>
+          <p>Becomes a tracked task with an owner. If nobody was named it stays unowned, and the
+             agent chases it out loud on a timer.</p>
+          <p class="artifact">Task &middot; Task.owner &middot; Provenance</p>
+        </article>
+        <article class="card">
+          <span class="tag t-live">Context</span>
+          <h3>Anyone walking in cold</h3>
+          <p>Asks once and gets a spoken catch-up in twenty seconds: what is known, what is
+             pending, and what is still unowned.</p>
+          <p class="artifact">spoken handoff &middot; five panels, not a transcript</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 ---------------------------------------------------------------->
+  <section class="slide" data-title="The boundary">
+    <div class="inner">
+      <p class="eyebrow">The line it does not cross</p>
+      <h2>It never recommends a therapy.</h2>
+      <div class="grid g2" style="margin: 30px 0 22px;">
+        <article class="card">
+          <span class="tag t-critical">What it says</span>
+          <p class="said" style="font-size: 17px; line-height: 1.5;">
+            &ldquo;Ampicillin-sulbactam is a penicillin-class antibacterial. Penicillin allergy
+            documented at 14:32, severe, relayed by the nurse from the mother.&rdquo;
+          </p>
+          <p class="artifact">states the fact &middot; names the source &middot; stops</p>
+        </article>
+        <article class="card">
+          <span class="tag t-muted">What it will never say</span>
+          <p class="said" style="font-size: 17px; line-height: 1.5; color: var(--muted); text-decoration: line-through; text-decoration-color: var(--border);">
+            &ldquo;Give vancomycin instead.&rdquo;
+          </p>
+          <p class="artifact">no alternative drug &middot; no dose &middot; no &ldquo;give this&rdquo;</p>
+        </article>
+      </div>
+      <p class="sub">
+        The boundary is deliberate. Software that recommends a therapy is a different regulatory
+        and liability object than software that surfaces information a clinician can independently
+        review, and the second is the honest description of what a language model is reliably good
+        at. The clinician draws the conclusion. It is also why every assertion carries a
+        <span class="mono" style="color: var(--query);">Provenance</span> resource &mdash; and why
+        <span class="mono" style="color: var(--query);">tests/test_ledger.py</span> asserts the
+        boundary, so it cannot quietly drift back.
+      </p>
+    </div>
+  </section>
+
+  <!-- 5 ---------------------------------------------------------------->
+  <section class="slide" data-title="The flow">
+    <div class="inner">
+      <p class="eyebrow">The flow &mdash; click any stage</p>
+      <h2 style="margin-bottom: 26px;">One path, room to room.</h2>
+      <div class="pipe" id="pipe" role="tablist" aria-label="Pipeline stages"></div>
+      <div class="stage-detail" id="stageDetail" role="tabpanel" aria-live="polite"></div>
+      <div class="branches">
+        <div class="branch"><span class="mono">Vision</span>
+          <span>A point-of-view camera frame informs context, and never writes a clinical value.
+            A number misread off a monitor at arm&rsquo;s length would otherwise be
+            indistinguishable from something a clinician actually said.</span></div>
+        <div class="branch"><span class="mono">Watchdog</span>
+          <span>Runs on a timer, independent of anyone speaking, so unowned work gets chased even
+            when the room goes quiet.</span></div>
+        <div class="branch"><span class="mono">Gate</span>
+          <span>Nothing interrupts until the ordered drug&rsquo;s FDA class is resolved and
+            actually matches a documented allergy.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 ---------------------------------------------------------------->
+  <section class="slide" data-title="Why it can interrupt">
+    <div class="inner">
+      <p class="eyebrow">Why it is allowed to interrupt</p>
+      <h2>The word &ldquo;penicillin&rdquo; never appears.</h2>
+      <p class="sub" style="margin: 16px 0 24px;">
+        The doctor orders <span class="mono" style="color: var(--ink);">ampicillin-sulbactam</span>.
+        The patient has a documented <span class="mono" style="color: var(--ink);">penicillin</span>
+        allergy. Here is what each approach does with that.
+      </p>
+      <div class="grid g2">
+        <article class="verdict miss">
+          <span class="tag t-muted">String matching</span>
+          <div class="chain" data-chain="miss">
+            <div class="chain-row"><span class="arrow">&rsaquo;</span><span>order.includes("penicillin")</span></div>
+            <div class="chain-row"><span class="arrow">&rsaquo;</span><span>"ampicillin-sulbactam"</span></div>
+            <div class="chain-row"><span class="arrow">&rsaquo;</span><span>false</span></div>
+          </div>
+          <div class="outcome miss">No alert. Silent miss.</div>
+        </article>
+        <article class="verdict hit">
+          <span class="tag t-critical">Tier 1 &middot; FDA class</span>
+          <div class="chain" data-chain="hit">
+            <div class="chain-row"><span class="arrow">&rsaquo;</span><span>ampicillin-sulbactam</span></div>
+            <div class="chain-row"><span class="arrow">&rsaquo;</span><span>RxNav &rarr; RxCUI 1009148</span></div>
+            <div class="chain-row"><span class="arrow">&rsaquo;</span><span>EPC: Penicillin-class Antibacterial</span></div>
+            <div class="chain-row"><span class="arrow">&rsaquo;</span><span>matches documented allergy</span></div>
+          </div>
+          <div class="outcome hit">Speaks. Once.</div>
+        </article>
+      </div>
+      <div class="tiers">
+        <article class="card">
+          <span class="tag t-critical">Tier 1 &middot; deterministic</span>
+          <p>Crosses documented allergies against the medication just ordered, resolves the drug
+             through NIH RxNav to its FDA Established Pharmacologic Class, and fires only on a real
+             class match. It cannot invent a conflict, because it is not the thing deciding one
+             exists.</p>
+          <p class="artifact">negative control: clindamycin &rarr; Lincosamide &rarr; correctly silent</p>
+        </article>
+        <article class="card">
+          <span class="tag t-advisory">Tier 2 &middot; advisory</span>
+          <p>An open-ended agent for what no rule could enumerate ahead of time. Read-only: it
+             never writes to the ledger, and it can never promote itself to critical. Two tiers,
+             and only one of them is allowed to raise its voice.</p>
+          <p class="artifact">dispatched off the critical path &middot; never blocks tier 1</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 ---------------------------------------------------------------->
+  <section class="slide" data-title="The ledger is FHIR">
+    <div class="inner">
+      <p class="eyebrow">Grounded in Medplum</p>
+      <h2>The ledger is not a JSON blob.</h2>
+      <p class="sub" style="margin: 16px 0 22px;">
+        <span class="mono" style="color: var(--ink);">Task</span> is not a stretch here, it is what
+        the resource is for. Which means the hard part &mdash; unowned work &mdash; is a standard
+        search rather than a concept we invented.
+      </p>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>What the room produces</th><th>Where it lands</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>the request</td><td class="fhir">Task.code.text</td></tr>
+            <tr><td>why it matters</td><td class="fhir">Task.description</td></tr>
+            <tr><td>who owns it (omitted entirely when unowned)</td><td class="fhir">Task.owner &rarr; Practitioner</td></tr>
+            <tr class="spot"><td><strong>every unowned, still-open task</strong></td><td class="fhir">GET /Task?owner:missing=true&amp;status=ready</td></tr>
+            <tr><td>&ldquo;repeat that pressure in five minutes&rdquo;</td><td class="fhir">Task.restriction.period.end</td></tr>
+            <tr><td>evidence it was actually done</td><td class="fhir">Task.note &middot; [speech] / [vision]</td></tr>
+            <tr><td>who asserted it, on whose authority</td><td class="fhir">Provenance.agent.onBehalfOf</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="sub" style="margin-top: 18px;">
+        Status mapping follows Medplum&rsquo;s own guidance for a single-system implementation:
+        <span class="mono" style="color: var(--query);">open &rarr; ready</span>,
+        <span class="mono" style="color: var(--query);">acknowledged &rarr; in-progress</span>,
+        <span class="mono" style="color: var(--query);">completed &rarr; completed</span>.
+        Provenance records the agent Device as
+        <span class="mono" style="color: var(--query);">agent.who</span> and the human source as
+        <span class="mono" style="color: var(--query);">agent.onBehalfOf</span>, so the mother
+        stays the source and the nurse stays the relay.
+      </p>
+    </div>
+  </section>
+
+  <!-- 8 ---------------------------------------------------------------->
+  <section class="slide" data-title="The stack">
+    <div class="inner">
+      <p class="eyebrow">The stack, as capability</p>
+      <h2 style="margin-bottom: 12px;">Each one does something the product could not do without it.</h2>
+      <div class="stackrow">
+        <h3>Deepgram</h3>
+        <div>
+          <p>The entire interface, not a transcription step. <span class="mono">nova-3-medical</span>
+             streaming in with keyterm prompting, diarization and <span class="mono">UtteranceEnd</span>
+             endpointing; Aura-2 speaking back out. There is no keyboard in this product.</p>
+          <p class="artifact">STT + TTS &middot; acoustic segments merged into clinical utterances before extraction</p>
+        </div>
+      </div>
+      <div class="stackrow">
+        <h3>Medplum</h3>
+        <div>
+          <p>The record. Every artifact is a real FHIR resource written over OAuth2
+             client-credentials, which is what makes <span class="mono">owner:missing=true</span>
+             a native query instead of a bespoke flag we would have had to maintain.</p>
+          <p class="artifact">Task &middot; Provenance &middot; AllergyIntolerance &middot; Observation &middot; MedicationRequest &middot; Practitioner &middot; Encounter</p>
+        </div>
+      </div>
+      <div class="stackrow">
+        <h3>Claude Opus 5</h3>
+        <div>
+          <p>Structured extraction that is <em>stateful</em>: the open ledger goes in with every
+             utterance, so &ldquo;I&rsquo;ve got it&rdquo; resolves against the task it refers to
+             rather than becoming a new one.</p>
+          <p class="artifact">structured outputs &middot; schemas pre-compiled at boot &middot; prompt caching on the system block</p>
+        </div>
+      </div>
+      <div class="stackrow">
+        <h3>NIH RxNav</h3>
+        <div>
+          <p>The FDA Established Pharmacologic Class, which is the difference between an interrupt
+             that is a fact and an interrupt that is a guess.</p>
+          <p class="artifact">free, no key &middot; cached in process &middot; degrades to silent rather than to wrong</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 ---------------------------------------------------------------->
+  <section class="slide" data-title="The demo">
+    <div class="inner">
+      <p class="eyebrow">The demo &mdash; fill the ledger, disturb it, drain it</p>
+      <h2 style="margin-bottom: 24px;">Fifty-seven seconds in a trauma bay.</h2>
+      <div class="tl">
+        <div class="beats" id="beats" role="tablist" aria-label="Demo beats"></div>
+        <div class="viewer">
+          <div class="screen" id="screen"></div>
+          <div class="viewer-body" id="viewerBody"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 --------------------------------------------------------------->
+  <section class="slide" data-title="Close">
+    <div class="inner">
+      <p class="eyebrow">Servare</p>
+      <div class="close-lines">
+        <span>It asks.</span>
+        <span>It never assigns.</span>
+        <span>And it never advises.</span>
+      </div>
+      <hr class="rule" style="margin: 34px 0 22px;" />
+      <p class="lede" style="max-width: 54ch;">
+        The room keeps talking. Something should be keeping the record.
+      </p>
+    </div>
+  </section>
+
+</div>
+
+<div class="chrome">
+  <button type="button" id="themeBtn">Theme</button>
+  <button type="button" id="prevBtn" aria-label="Previous slide">&larr;</button>
+  <button type="button" id="nextBtn" aria-label="Next slide">&rarr;</button>
+  <span class="counter" id="counter">01 / 10</span>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---- slides ------------------------------------------------------- */
+
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var rail = document.getElementById("rail");
+  var counter = document.getElementById("counter");
+  var current = 0;
+
+  slides.forEach(function (s, i) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("aria-label", "Slide " + (i + 1) + ": " + s.dataset.title);
+    b.addEventListener("click", function () { go(i); });
+    rail.appendChild(b);
+  });
+  var dots = Array.prototype.slice.call(rail.children);
+
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  function go(i) {
+    current = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach(function (s, n) { s.classList.toggle("is-active", n === current); });
+    dots.forEach(function (d, n) { d.setAttribute("aria-current", n === current ? "true" : "false"); });
+    counter.textContent = pad(current + 1) + " / " + pad(slides.length);
+    if (current === 5) replayChains();
+  }
+
+  document.getElementById("prevBtn").addEventListener("click", function () { go(current - 1); });
+  document.getElementById("nextBtn").addEventListener("click", function () { go(current + 1); });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.target.tagName === "BUTTON" && (e.key === " " || e.key === "Enter")) return;
+    if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); go(current + 1); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); go(current - 1); }
+    else if (e.key === "Home") { e.preventDefault(); go(0); }
+    else if (e.key === "End") { e.preventDefault(); go(slides.length - 1); }
+  });
+
+  /* ---- theme -------------------------------------------------------- */
+
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var root = document.documentElement;
+    var dark = root.getAttribute("data-theme")
+      ? root.getAttribute("data-theme") === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.setAttribute("data-theme", dark ? "light" : "dark");
+  });
+
+  /* ---- pipeline ----------------------------------------------------- */
+
+  var STAGES = [
+    {
+      n: "01", name: "The room", sub: "point-of-view mic",
+      body: "<p>Audio streams from wherever the clinician already is. On Ray-Ban Meta that is the " +
+            "open-ear mic with no display to look at; in the browser the proxy is the laptop. The " +
+            "capture module is isolated behind one small interface, so the rest of the pipeline " +
+            "cannot tell which lens it came from.</p>"
+    },
+    {
+      n: "02", name: "Deepgram", sub: "nova-3-medical",
+      body: "<p>Streaming speech-to-text with a medical vocabulary, keyterm prompting for the drug " +
+            "names this case turns on, diarization to tell us <em>that</em> the speaker changed, and " +
+            "<span class='mono'>UtteranceEnd</span> for real endpointing rather than a wall-clock guess.</p>" +
+            "<p>Deepgram's acoustic segments are then merged into clinical utterances, because " +
+            "&ldquo;GCS thirteen&rdquo; split across two segments is not a vital sign anymore.</p>"
+    },
+    {
+      n: "03", name: "Claude Opus 5", sub: "structured extraction",
+      body: "<p>Each utterance is extracted into the ledger under a strict schema. The extraction is " +
+            "<em>stateful</em>: the currently open tasks go in with the utterance, so &ldquo;I've got " +
+            "ortho&rdquo; resolves the existing task and assigns its owner instead of creating a " +
+            "duplicate.</p>" +
+            "<p>Schemas are pre-compiled at boot and the system block is cached, so the first real " +
+            "utterance of a case does not pay for the setup.</p>"
+    },
+    {
+      n: "04", name: "Medplum", sub: "the FHIR ledger",
+      body: "<p>Facts become <span class='mono'>Observation</span>, " +
+            "<span class='mono'>AllergyIntolerance</span> and " +
+            "<span class='mono'>MedicationRequest</span>. Requests become " +
+            "<span class='mono'>Task</span>. Every one of them carries a " +
+            "<span class='mono'>Provenance</span> naming the agent that asserted it and the human it " +
+            "came from.</p>" +
+            "<p>Because it is real FHIR, &ldquo;show me everything nobody has taken&rdquo; is a " +
+            "standard search and not a feature we had to build.</p>"
+    },
+    {
+      n: "05", name: "Back into the room", sub: "Aura-2",
+      body: "<p>Output is spoken, never displayed, and it is queued by urgency rather than by arrival " +
+            "&mdash; a verified conflict jumps ahead of an advisory that was already waiting.</p>" +
+            "<p>When the agent speaks, the audio playing into the room ducks rather than pauses, so " +
+            "the transcript stream never falls behind real time.</p>"
+    }
+  ];
+
+  var pipe = document.getElementById("pipe");
+  var stageDetail = document.getElementById("stageDetail");
+
+  STAGES.forEach(function (st, i) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "stage-btn";
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", i === 0 ? "true" : "false");
+    b.innerHTML = '<span class="stage-n">' + st.n + '</span>' +
+                  '<span class="stage-name">' + st.name + '</span>' +
+                  '<span class="stage-sub">' + st.sub + '</span>';
+    b.addEventListener("click", function () { selectStage(i); });
+    pipe.appendChild(b);
+  });
+  var stageBtns = Array.prototype.slice.call(pipe.children);
+
+  function selectStage(i) {
+    stageBtns.forEach(function (b, n) { b.setAttribute("aria-selected", n === i ? "true" : "false"); });
+    stageDetail.innerHTML = STAGES[i].body;
+  }
+  selectStage(0);
+
+  /* ---- conflict chains ---------------------------------------------- */
+
+  function replayChains() {
+    var chains = document.querySelectorAll("[data-chain]");
+    Array.prototype.forEach.call(chains, function (chain) {
+      var rows = Array.prototype.slice.call(chain.children);
+      rows.forEach(function (r) { r.classList.remove("shown"); });
+      rows.forEach(function (r, i) {
+        setTimeout(function () { r.classList.add("shown"); }, 220 + i * 260);
+      });
+    });
+  }
+
+  /* ---- demo timeline ------------------------------------------------ */
+
+  var BEATS = [
+    {
+      t: "0:00", name: "EMS handoff", clip: "01-handoff.mp4", critical: false,
+      said: "&ldquo;Nineteen year old female, front seat passenger, GCS 13, she&rsquo;s confused, " +
+            "she can&rsquo;t give us a history. Open left tibia fracture, gross contamination. " +
+            "Heart rate 122, blood pressure 104 over 68.&rdquo;",
+      note: "The ledger fills. Note what it also records: the patient cannot give a history, so " +
+            "from here the ledger is the only history that exists."
+    },
+    {
+      t: "0:28", name: "Three requests, one unowned", clip: "02-requests.mp4", critical: false,
+      said: "&ldquo;Someone find out whether she&rsquo;s anticoagulated, get ortho down here, and " +
+            "repeat that pressure in five minutes.&rdquo;",
+      note: "Three Tasks land. Ortho and the repeat pressure have someone implied; anticoagulation " +
+            "has nobody named, so owner is left off entirely rather than guessed from the speaker."
+    },
+    {
+      t: "0:35", name: "One claimed, one dangling", clip: "03-claim.mp4", critical: false,
+      said: "&ldquo;I&rsquo;ve got ortho, I&rsquo;m calling them now.&rdquo;",
+      note: "Stateful extraction resolves this against the existing task instead of opening a new " +
+            "one. Ortho goes in-progress with an owner. Anticoagulation stays unowned."
+    },
+    {
+      t: "0:38", name: "Outside-source allergy", clip: "04-allergy.mp4", critical: false,
+      said: "&ldquo;Mom just told me she has a severe penicillin allergy, anaphylaxis as a child.&rdquo;",
+      note: "AllergyIntolerance lands with a Provenance recording the mother as the source and the " +
+            "nurse as the relay. The substance is stored bare; the reaction and severity are " +
+            "separate fields, so a class lookup can actually match it."
+    },
+    {
+      t: "0:50", name: "The conflicting order", clip: "05-conflict.mp4", critical: true,
+      said: "&ldquo;Let&rsquo;s get ampicillin-sulbactam, three grams IV, push it.&rdquo;",
+      note: "Twelve seconds after the allergy. RxNav resolves the order to a Penicillin-class " +
+            "Antibacterial and the agent speaks once, naming the class, the time the allergy was " +
+            "recorded and who it came from. It does not suggest a replacement."
+    },
+    {
+      t: "1:05", name: "The agent asks the room", clip: "06-watchdog.mp4", critical: false,
+      said: "&ldquo;Determine anticoagulation status is still unanswered and nobody has taken it. " +
+            "Who is taking it?&rdquo;",
+      note: "The watchdog fires on its own timer, with nobody speaking and the room already moved " +
+            "on. It asks. It does not assign, and it does not advise."
+    },
+    {
+      t: "&mdash;", name: "Handoff to someone who wasn't there", clip: "07-handoff.mp4", critical: false,
+      said: "&ldquo;What do I need to know?&rdquo;",
+      note: "Five panels instead of a transcript, spoken in about twenty seconds, with the still-" +
+            "unowned anticoagulation question leading the unresolved list."
+    }
+  ];
+
+  var beatsEl = document.getElementById("beats");
+  var screen = document.getElementById("screen");
+  var viewerBody = document.getElementById("viewerBody");
+
+  BEATS.forEach(function (b, i) {
+    var el = document.createElement("button");
+    el.type = "button";
+    el.className = "beat" + (b.critical ? " is-critical" : "");
+    el.setAttribute("role", "tab");
+    el.setAttribute("aria-selected", i === 0 ? "true" : "false");
+    el.innerHTML = '<span class="beat-t">' + b.t + '</span>' +
+                   '<span class="beat-name">' + b.name + '</span>';
+    el.addEventListener("click", function () { selectBeat(i); });
+    beatsEl.appendChild(el);
+  });
+  var beatBtns = Array.prototype.slice.call(beatsEl.children);
+
+  function selectBeat(i) {
+    var b = BEATS[i];
+    beatBtns.forEach(function (el, n) { el.setAttribute("aria-selected", n === i ? "true" : "false"); });
+
+    /* Try the clip. Show a labelled slot until (and unless) it actually loads,
+       so a missing file reads as "drop it here" rather than as a broken deck. */
+    screen.innerHTML = "";
+    var slot = document.createElement("div");
+    slot.className = "slot";
+    slot.innerHTML = '<span class="filename">deck/clips/' + b.clip + '</span>' +
+                     '<span class="hint">Drop the screen-recording snippet for this beat here ' +
+                     'and it plays in place, no other change needed.</span>';
+    screen.appendChild(slot);
+
+    var v = document.createElement("video");
+    v.src = "clips/" + b.clip;
+    v.controls = true;
+    v.playsInline = true;
+    v.preload = "metadata";
+    v.addEventListener("loadeddata", function () {
+      screen.innerHTML = "";
+      screen.appendChild(v);
+    });
+
+    viewerBody.innerHTML = '<p class="said">' + b.said + '</p>' +
+                           '<p class="note">' + b.note + '</p>' +
+                           (b.critical ? '<span class="tag t-critical">Agent speaks &middot; FDA verified</span>' : '');
+  }
+  selectBeat(0);
+
+  go(0);
+})();
+</script>
+</body>
+</html>
