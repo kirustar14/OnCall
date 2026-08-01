@@ -103,9 +103,13 @@ final class GlassesStreamer {
         lastError = nil
         do {
             // Hold the selector — see the note on the property.
+            // No capability predicate: the SDK exposes supportsDisplay() on a
+            // Device but nothing equivalent for the camera — camera access is an
+            // extension on DeviceSession, so it is discovered by opening the
+            // session rather than by filtering beforehand.
             let selector = AutoDeviceSelector(
                 wearables: wearables,
-                filter: { $0.supportsCamera() }
+                filter: { _ in true }
             )
             deviceSelector = selector
 

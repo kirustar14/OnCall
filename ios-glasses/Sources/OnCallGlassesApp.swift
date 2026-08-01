@@ -36,7 +36,10 @@ struct OnCallGlassesApp: App {
                 // Meta AI returns here after pairing. Without this the
                 // registration flow leaves and never comes back.
                 .onOpenURL { url in
-                    Wearables.shared.handleURL(url)
+                    // handleUrl, not handleURL — and it is async throws in
+                    // DAT 0.8.0, where the registration/permission URL handlers
+                    // were consolidated onto Wearables itself.
+                    Task { _ = try? await Wearables.shared.handleUrl(url) }
                 }
         }
     }

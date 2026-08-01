@@ -20,3 +20,8 @@ frontend/.env
 # Runtime state snapshot
 .oncall-state.json
 *.tmp
+
+# Xcode
+ios-glasses/build/
+ios-glasses/*.xcodeproj/project.xcworkspace/xcuserdata/
+ios-glasses/*.xcodeproj/xcuserdata/

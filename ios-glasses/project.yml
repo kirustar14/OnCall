@@ -1,0 +1,55 @@
+# Generates OnCallGlasses.xcodeproj — `xcodegen generate`, then open the project.
+#
+# Bundle identifier deliberately matches the existing RARE-Insight app, because
+# the Meta developer-console registration (MetaAppID / ClientToken) is issued
+# against that identifier. A new bundle id would need a new registration, and
+# Device Access Toolkit access is gated. Installing this replaces RARE-Insight
+# on the phone.
+
+name: OnCallGlasses
+options:
+  bundleIdPrefix: com.cortexon
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  MetaWearablesDAT:
+    url: https://github.com/facebook/meta-wearables-dat-ios
+    from: "0.7.0"
+
+targets:
+  OnCallGlasses:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    dependencies:
+      - package: MetaWearablesDAT
+        product: MWDATCore
+      - package: MetaWearablesDAT
+        product: MWDATCamera
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: OnCall Glasses
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # The backend runs over plain HTTP on the LAN during a demo.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription:
+          Sends point-of-view frames to the OnCall backend on this network.
+        NSBluetoothAlwaysUsageDescription:
+          Connects to Meta Ray-Ban Display glasses to receive the camera stream.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cortexon.rareinsight
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
