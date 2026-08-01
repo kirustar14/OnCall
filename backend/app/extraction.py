@@ -9,6 +9,7 @@ import anthropic
 from app.case_store import CaseState
 from app.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 from app.medplum_client import medplum_client
+from app.moss_client import moss_client
 
 logger = logging.getLogger("servare.extraction")
 
@@ -139,6 +140,23 @@ async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -
         except Exception:
             logger.exception("medplum: failed to create Patient/Encounter for case %s", case.case_id)
 
+    # case_details (especially "name") is set FIRST, before any allergy/vital/medication/note
+    # processing below — those all tag their moss.dev doc with case.case_details.get("name"),
+    # and a segment that states the name alongside a fact (e.g. "This is Jordan Lee, he got
+    # hives after amoxicillin") must have the name already recorded when that fact is indexed,
+    # not after.
+    details = extracted.get("case_details", {}) or {}
+    for key in ("name", "age", "sex", "mechanism"):
+        val = (details.get(key) or "").strip()
+        if val and not case.case_details.get(key):
+            case.case_details[key] = val
+            new_facts.append(f"Patient {key} recorded: {val}")
+            if key == "name" and medplum_client.configured and case.patient_id:
+                try:
+                    await medplum_client.update_patient_name(case.patient_id, val)
+                except Exception:
+                    logger.exception("medplum: failed to update patient name for case %s", case.case_id)
+
     for allergy in extracted.get("allergies", []):
         allergen = allergy.get("allergen", "").strip()
         if not allergen:
@@ -153,6 +171,13 @@ async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -
                 await medplum_client.write_allergy(case.patient_id, case.encounter_id, allergen, entry["source"], now)
             except Exception:
                 logger.exception("medplum: failed to write allergy for case %s", case.case_id)
+        await moss_client.index_fact(
+            case.case_id,
+            case.case_details.get("name"),
+            "allergy",
+            f"Patient reported {allergen} allergy (source: {entry['source']})",
+            now,
+        )
 
     for vital in extracted.get("vitals", []):
         name = vital.get("name", "").strip()
@@ -167,6 +192,13 @@ async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -
                 await medplum_client.write_vital(case.patient_id, case.encounter_id, name, value, entry["source"], now)
             except Exception:
                 logger.exception("medplum: failed to write vital for case %s", case.case_id)
+        await moss_client.index_fact(
+            case.case_id,
+            case.case_details.get("name"),
+            "vital",
+            f"{name} recorded as {value} (source: {entry['source']})",
+            now,
+        )
 
     for med in extracted.get("medications", []):
         name = med.get("name", "").strip()
@@ -189,22 +221,18 @@ async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -
                 )
             except Exception:
                 logger.exception("medplum: failed to write medication for case %s", case.case_id)
+        await moss_client.index_fact(
+            case.case_id,
+            case.case_details.get("name"),
+            "medication",
+            f"{name} {entry['status']} (source: {entry['source']})",
+            now,
+        )
 
     notes = extracted.get("notes", "").strip()
     if notes:
         case.notes.append(notes)
         new_facts.append(f"New note: {notes}")
-
-    details = extracted.get("case_details", {}) or {}
-    for key in ("name", "age", "sex", "mechanism"):
-        val = (details.get(key) or "").strip()
-        if val and not case.case_details.get(key):
-            case.case_details[key] = val
-            new_facts.append(f"Patient {key} recorded: {val}")
-            if key == "name" and medplum_client.configured and case.patient_id:
-                try:
-                    await medplum_client.update_patient_name(case.patient_id, val)
-                except Exception:
-                    logger.exception("medplum: failed to update patient name for case %s", case.case_id)
+        await moss_client.index_fact(case.case_id, case.case_details.get("name"), "note", notes, now)
 
     return extracted, new_facts

@@ -16,6 +16,7 @@ from app.deepgram_tts import synthesize_speech
 from app.extraction import run_extraction_and_persist
 from app.intent import classify_segment
 from app.medplum_client import medplum_client
+from app.moss_client import moss_client
 from app.ws_manager import ws_manager
 
 logging.basicConfig(level=logging.INFO)
@@ -41,6 +42,13 @@ async def _reapply_logging_config():
         if name.startswith("servare"):
             logging.getLogger(name).disabled = False
     logging.getLogger("servare").setLevel(logging.INFO)
+
+    if moss_client.configured:
+        # Warms up the client + ensures the index exists/loads now, during boot,
+        # rather than blocking the first live extraction mid-demo. moss's SDK has
+        # an intermittent first-call auth race (see app/moss_client.py) that this
+        # also absorbs, with retries, before any case is open.
+        asyncio.create_task(moss_client.warmup())
 
 
 @app.get("/api/health")
