@@ -17,6 +17,39 @@ const URGENCY_RANK = { critical: 0, advisory: 1, informational: 2 };
 let queue = [];
 let isPlaying = false;
 
+// Serializing alerts against each other is only half the problem: a clip
+// playing the scenario out loud is a second audio source this queue never saw,
+// so the agent talked over it. Anything else making noise subscribes here and
+// gets out of the way while the agent speaks.
+const speakingListeners = new Set();
+
+function setSpeaking(value) {
+  if (isPlaying === value) return;
+  isPlaying = value;
+  for (const listener of speakingListeners) {
+    try {
+      listener(value);
+    } catch (err) {
+      console.warn('speaking listener failed', err);
+    }
+  }
+}
+
+/**
+ * Subscribe to "the agent is speaking right now". Returns an unsubscribe fn.
+ * Used by clip playback to duck itself rather than pause, since the PCM stream
+ * to Deepgram has to keep flowing at real-time pace regardless.
+ */
+export function onSpeakingChange(listener) {
+  speakingListeners.add(listener);
+  listener(isPlaying);
+  return () => speakingListeners.delete(listener);
+}
+
+export function isSpeaking() {
+  return isPlaying;
+}
+
 function comparePriority(a, b) {
   const rankA = URGENCY_RANK[a.urgency] ?? URGENCY_RANK.advisory;
   const rankB = URGENCY_RANK[b.urgency] ?? URGENCY_RANK.advisory;
@@ -53,13 +86,13 @@ function playNext() {
     return;
   }
 
-  isPlaying = true;
+  setSpeaking(true);
   let url;
   try {
     url = decodeAudio(next.audioB64, next.audioMime);
   } catch (err) {
     console.warn('failed to decode queued alert audio', err);
-    isPlaying = false;
+    setSpeaking(false);
     playNext();
     return;
   }
@@ -67,7 +100,7 @@ function playNext() {
   const audio = new Audio(url);
   const finish = () => {
     URL.revokeObjectURL(url);
-    isPlaying = false;
+    setSpeaking(false);
     playNext();
   };
   audio.onended = finish;

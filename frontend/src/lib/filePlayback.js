@@ -10,8 +10,17 @@
 // same audio as 16 kHz mono PCM16 — the format the backend already forwards to
 // Deepgram.
 
+import { onSpeakingChange } from './audioQueue';
+
 const TARGET_SAMPLE_RATE = 16000;
 const CHUNK_MS = 100;
+
+// How far the scenario drops while the agent is talking. Not silence: the room
+// carries on in a real resuscitation, and hearing the agent cut through the
+// noise is the point. Ducking rather than pausing also keeps the PCM stream to
+// Deepgram flowing at real-time pace, which pausing would break.
+const DUCKED_GAIN = 0.12;
+const DUCK_RAMP_SECONDS = 0.18;
 
 /** Decode any browser-supported audio file to 16 kHz mono Float32. */
 async function decodeTo16kMono(file) {
@@ -65,11 +74,26 @@ export async function startFilePlayback(file, onChunk, options = {}) {
   // original file while Deepgram receives the resampled PCM.
   let playbackCtx = null;
   let playbackSource = null;
+  let gainNode = null;
+  let unsubscribeDuck = null;
   if (audible) {
     playbackCtx = new AudioContext();
     playbackSource = playbackCtx.createBufferSource();
     playbackSource.buffer = original;
-    playbackSource.connect(playbackCtx.destination);
+    gainNode = playbackCtx.createGain();
+    playbackSource.connect(gainNode);
+    gainNode.connect(playbackCtx.destination);
+
+    // Duck whenever the agent speaks, restore when it stops. Ramped, because an
+    // instant gain change clicks.
+    unsubscribeDuck = onSpeakingChange((speaking) => {
+      if (!gainNode || !playbackCtx) return;
+      const target = speaking ? DUCKED_GAIN : 1;
+      const now = playbackCtx.currentTime;
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+      gainNode.gain.linearRampToValueAtTime(target, now + DUCK_RAMP_SECONDS);
+    });
   }
 
   let offset = 0;
@@ -79,6 +103,8 @@ export async function startFilePlayback(file, onChunk, options = {}) {
   const cleanup = () => {
     if (timer) clearInterval(timer);
     timer = null;
+    unsubscribeDuck?.();
+    unsubscribeDuck = null;
     try {
       playbackSource?.stop();
     } catch {
