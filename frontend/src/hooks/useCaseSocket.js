@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startAudioCapture, stopAudioCapture } from '../lib/audioCapture';
 import { startFilePlayback } from '../lib/filePlayback';
-import { createFrameGrabber } from '../lib/frameCapture';
+import { createFrameGrabber, startFrameBuffer } from '../lib/frameCapture';
 import { enqueueAlert } from '../lib/audioQueue';
 import { getSavedInput, saveInput, saveOutput } from '../lib/audioDevices';
 
@@ -51,6 +51,7 @@ export function useCaseSocket(caseId, onAgentStep) {
   const audioCaptureRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const grabberRef = useRef(null);
+  const bufferRef = useRef(null);
   const inputModeRef = useRef('mic');
   const playbackRef = useRef(null);
 
@@ -83,6 +84,43 @@ export function useCaseSocket(caseId, onAgentStep) {
         setAlerts((prev) => prev.filter((a) => a.id !== alertId));
       }, 320);
       dismissTimers.add(timer);
+    }
+
+    /**
+     * Send the buffered frame from a given moment for description.
+     *
+     * This is the whole point of buffering: an alert fires a beat after the
+     * thing that caused it, so "what was in view" means a few seconds ago, not
+     * now. Silent by design — if there is no frame near that moment, or the
+     * call fails, the alert stands on its own. A picture is context, never a
+     * precondition.
+     */
+    async function lookBackAt(momentMs) {
+      const frame = bufferRef.current?.nearest(momentMs);
+      if (!frame || cancelled) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/observe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            case_id: caseId,
+            image_b64: frame.base64,
+            media_type: 'image/jpeg',
+          }),
+        });
+        if (!res.ok || cancelled) return;
+        const observation = await res.json();
+        if (observation.error || cancelled) return;
+        setLastLook({
+          dataUrl: frame.dataUrl,
+          observation,
+          at: frame.t,
+          lookedBack: true,
+          deltaMs: frame.deltaMs,
+        });
+      } catch {
+        /* the alert does not depend on this */
+      }
     }
 
     function handleMessage(msg) {
@@ -118,6 +156,10 @@ export function useCaseSocket(caseId, onAgentStep) {
       } else if (msg.type === 'alert') {
         // The banner appears immediately; only the speech is queued.
         setAlerts((prev) => [...prev, msg.alert]);
+        // Look back at the moment this fired, not at now. By the time an alert
+        // lands the room has already moved on, and the frame that explains it
+        // is a few seconds in the past.
+        lookBackAt((msg.alert.timestamp || Date.now() / 1000) * 1000);
         enqueueAlert({
           id: msg.alert.id,
           caseId,
@@ -182,6 +224,9 @@ export function useCaseSocket(caseId, onAgentStep) {
         // Hold a grabber on the stream so a capture is instant rather than
         // spinning up a video element at the moment someone needs an answer.
         grabberRef.current = createFrameGrabber(media);
+        // Continuous local capture. Frames stay in memory and expire; the only
+        // one that ever leaves is the one matching a moment worth explaining.
+        bufferRef.current = startFrameBuffer(grabberRef.current);
 
         const ws = new WebSocket(`${WS_BASE}/ws/case/${caseId}`);
         ws.binaryType = 'arraybuffer';
@@ -228,6 +273,10 @@ export function useCaseSocket(caseId, onAgentStep) {
       audioCaptureRef.current = null;
       playbackRef.current?.stop();
       playbackRef.current = null;
+      bufferRef.current?.stop();
+      bufferRef.current = null;
+      grabberRef.current?.stop();
+      grabberRef.current = null;
       if (mediaStreamRef.current) mediaStreamRef.current.getTracks().forEach((t) => t.stop());
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) wsRef.current.close();
     };

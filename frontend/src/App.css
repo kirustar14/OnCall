@@ -1497,3 +1497,11 @@ body {
   font-size: 12px;
   line-height: 1.45;
 }
+
+.pov-lookback {
+  margin-top: 8px;
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.04em;
+  color: #7fa8e8;
+}

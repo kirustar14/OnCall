@@ -39,6 +39,12 @@ export default function PovLook({ lastLook, looking, onLook, disabled, error }) 
             <img className="pov-frame" src={lastLook.dataUrl} alt="captured point-of-view frame" />
           )}
 
+          {lastLook.lookedBack && (
+            <div className="pov-lookback">
+              from {Math.round((Date.now() - lastLook.at) / 1000)}s ago — the moment the alert fired
+            </div>
+          )}
+
           <div className="pov-scene">
             <span className={`pov-confidence ${obs.confidence}`}>{obs.confidence}</span>
             {obs.scene}
