@@ -90,6 +90,18 @@ KEEPALIVE_INTERVAL_SECONDS = 5.0
 # is holding and emit it as a final transcript.
 FINALIZE_AFTER_SECONDS = 1.2
 
+# Finalize makes Deepgram emit the tail, but UtteranceEnd never follows it: that
+# event is derived from silence *inside the audio stream*, and by definition the
+# stream has stopped. So the last utterance of a case would sit in the buffer
+# until the quiet-timer fallback expired. That is exactly the wrong utterance to
+# delay, because in this scenario it is the drug order. Once Finalize's own
+# transcript has had a beat to land, treat the pause as an utterance boundary.
+#
+# This only fires when the audio *stream* stops, not on a conversational pause:
+# _last_audio is stamped by every frame, and both the mic and clip playback keep
+# sending frames through silence.
+FINALIZE_FLUSH_DELAY_SECONDS = 0.8
+
 
 class DeepgramSTTSession:
     """on_transcript(text, is_final, speaker_index) — speaker_index is None when
@@ -147,6 +159,7 @@ class DeepgramSTTSession:
                         self._last_send = now
                     except Exception:
                         return
+                    asyncio.create_task(self._flush_after_finalize())
                     continue
 
                 if now - self._last_send < KEEPALIVE_INTERVAL_SECONDS:
@@ -158,6 +171,18 @@ class DeepgramSTTSession:
                     return
         except asyncio.CancelledError:
             raise
+
+    async def _flush_after_finalize(self) -> None:
+        """Close the utterance once Finalize's transcript has landed."""
+        try:
+            await asyncio.sleep(FINALIZE_FLUSH_DELAY_SECONDS)
+        except asyncio.CancelledError:
+            return
+        if self._on_utterance_end is not None:
+            try:
+                await self._on_utterance_end()
+            except Exception:
+                logger.exception("post-finalize flush failed")
 
     async def _read_loop(self) -> None:
         if self._ws is None:

@@ -154,7 +154,14 @@ async def _assess_conflict(allergen: str, medication: str) -> dict:
             max_tokens=2048,
             thinking={"type": "adaptive"},
             output_config={
-                "effort": "medium",
+                # The hard part of this judgment is already done before the model
+                # is called: RxNav has resolved the ordered drug to its FDA
+                # Established Pharmacologic Class, and the documented allergen is
+                # supplied alongside it. What is left is "do these two collide",
+                # which does not need deliberation, and this call sits directly on
+                # the critical path between the order being spoken and the alert
+                # being heard. Measured at medium it cost ~9s of that path.
+                "effort": "low",
                 "format": {"type": "json_schema", "schema": CONFLICT_SCHEMA},
             },
             # Stable prefix — cached across every conflict check.
