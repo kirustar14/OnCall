@@ -14,6 +14,7 @@ from app.case_store import Alert, CaseState, TranscriptEntry, next_alert_seq, st
 from app.deepgram_stt import DeepgramSTTSession
 from app.deepgram_tts import synthesize_speech
 from app.extraction import run_extraction_and_persist
+from app.frame_buffer import Frame, frame_buffer
 from app.handoff import build_handoff
 from app.intent import classify_segment
 from app.intervention import check_for_conflicts
@@ -217,6 +218,76 @@ async def agent_log(limit: int = 400):
     steps = [step for case in store.all() for step in case.agent_steps]
     steps.sort(key=lambda s: s.get("timestamp", 0))
     return steps[-limit:]
+
+
+class FrameRequest(BaseModel):
+    case_id: str
+    image_b64: str
+    media_type: str = "image/jpeg"
+    captured_at: float
+    source: str = "unknown"
+
+
+@app.post("/api/frame")
+async def ingest_frame(req: FrameRequest):
+    """Accept one point-of-view frame into the case's short ring buffer.
+
+    Posted about once a second by whatever is wearing the camera — the iOS relay
+    for Ray-Ban Display, or the browser with a webcam. Both send identical JSON
+    and nothing downstream distinguishes them.
+
+    Nothing is analysed here. Frames sit in memory, age out, and exactly one is
+    ever looked at: the one nearest a moment that already mattered.
+    """
+    case = store.get(req.case_id)
+    if case is None:
+        return {"error": f"No such case: {req.case_id}"}
+
+    held = frame_buffer.add(
+        req.case_id,
+        Frame(
+            captured_at=req.captured_at,
+            image_b64=req.image_b64,
+            media_type=req.media_type,
+            source=req.source,
+        ),
+    )
+    return {"buffered": held}
+
+
+async def look_back_at(case: CaseState, moment: float) -> None:
+    """Describe the buffered frame from a given moment, if one is close enough.
+
+    An alert fires a beat after the thing that caused it, so the frame worth
+    seeing is a few seconds old — and nobody narrates a glance at a monitor, so
+    there is no audio marking it either. Silent when the buffer has nothing
+    nearby: a picture is context, never a precondition for an alert.
+    """
+    hit = frame_buffer.nearest(case.case_id, moment)
+    if hit is None:
+        return
+    frame, delta = hit
+
+    result = await describe_scene(
+        frame.image_b64,
+        frame.media_type,
+        open_ledger=case.open_ledger_for_prompt(),
+    )
+    if result.get("scene") in ("unreadable", "other") and not result.get("readings"):
+        return
+
+    await _emit_agent_step(
+        case,
+        {
+            "stage": "vision",
+            "detail": f"[{frame.source}, {delta:.0f}s before the alert] "
+            + (result.get("description") or ""),
+            "evidence": ", ".join(
+                f"{r['label']} appears to read {r['value']} ({r['legibility']})"
+                for r in result.get("readings", [])
+            ),
+        },
+    )
 
 
 class ObserveRequest(BaseModel):
