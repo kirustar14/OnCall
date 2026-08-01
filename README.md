@@ -1,6 +1,6 @@
 # OnCall
 
-***because the best doctors are the ones who pay attention* :) 
+****because the best doctors are the ones who pay attention* :) 
 
 OnCall is a clinician-facing, always-on voice agent for the ER. It listens to the room —
 EMS handoffs, nurse relays, physician orders — turns speech into structured clinical
