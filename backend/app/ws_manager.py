@@ -5,6 +5,7 @@ import asyncio
 import logging
 
 from fastapi import WebSocket
+from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 logger = logging.getLogger("servare.ws_manager")
 
@@ -23,8 +24,19 @@ class WSManager:
         ws = self._sockets.get(case_id)
         if ws is None:
             return
+
+        # Extraction runs behind the audio, so a case that just closed will
+        # still have writes landing after the browser is gone. That is expected,
+        # not an error — logging a traceback for each one buries real failures.
+        if ws.client_state is not WebSocketState.CONNECTED:
+            self.unregister(case_id)
+            return
+
         try:
             await ws.send_json(payload)
+        except (WebSocketDisconnect, RuntimeError):
+            logger.debug("case %s disconnected before push", case_id)
+            self.unregister(case_id)
         except Exception:
             logger.exception("failed to send to case %s", case_id)
 

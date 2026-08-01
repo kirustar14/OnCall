@@ -70,6 +70,14 @@ def _dominant_speaker(words: list[dict]) -> Optional[int]:
 # during the first quiet stretch and never comes back.
 KEEPALIVE_INTERVAL_SECONDS = 5.0
 
+# KeepAlive holds the connection open but does NOT flush buffered audio, so the
+# last thing said before a pause sits unfinalized until more speech arrives.
+# Measured: "Let's get ampicillin-sulbactam, three grams IV" — the order the
+# whole safety check exists for — never reached the ledger, because it was the
+# final utterance before silence. Finalize forces Deepgram to process what it
+# is holding and emit it as a final transcript.
+FINALIZE_AFTER_SECONDS = 1.2
+
 
 class DeepgramSTTSession:
     """on_transcript(text, is_final, speaker_index) — speaker_index is None when
@@ -81,6 +89,9 @@ class DeepgramSTTSession:
         self._reader_task: Optional[asyncio.Task] = None
         self._keepalive_task: Optional[asyncio.Task] = None
         self._last_send: float = 0.0
+        # Audio specifically — KeepAlive counts as traffic but not as speech.
+        self._last_audio: float = 0.0
+        self._finalize_sent: bool = True
 
     async def start(self) -> None:
         if not DEEPGRAM_API_KEY:
@@ -100,17 +111,30 @@ class DeepgramSTTSession:
         self._keepalive_task = asyncio.create_task(self._keepalive_loop())
 
     async def _keepalive_loop(self) -> None:
-        """Hold the connection open through silence."""
+        """Flush the tail of speech, then hold the connection open through silence."""
         try:
             while self._ws is not None:
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.4)
                 if self._ws is None:
                     return
-                if time.monotonic() - self._last_send < KEEPALIVE_INTERVAL_SECONDS:
+                now = time.monotonic()
+
+                # Audio just stopped — force out whatever is still buffered
+                # before settling into keepalive.
+                if not self._finalize_sent and now - self._last_audio >= FINALIZE_AFTER_SECONDS:
+                    try:
+                        await self._ws.send(json.dumps({"type": "Finalize"}))
+                        self._finalize_sent = True
+                        self._last_send = now
+                    except Exception:
+                        return
+                    continue
+
+                if now - self._last_send < KEEPALIVE_INTERVAL_SECONDS:
                     continue
                 try:
                     await self._ws.send(json.dumps({"type": "KeepAlive"}))
-                    self._last_send = time.monotonic()
+                    self._last_send = now
                 except Exception:
                     return
         except asyncio.CancelledError:
@@ -152,7 +176,11 @@ class DeepgramSTTSession:
             return
         try:
             await self._ws.send(chunk)
-            self._last_send = time.monotonic()
+            now = time.monotonic()
+            self._last_send = now
+            self._last_audio = now
+            # New speech — arm Finalize again for the next pause.
+            self._finalize_sent = False
         except Exception:
             logger.exception("failed to send audio chunk to Deepgram")
 
