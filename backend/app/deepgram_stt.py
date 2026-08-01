@@ -51,7 +51,12 @@ DEEPGRAM_LISTEN_URL = (
     # started when a final arrives measures Deepgram's delivery cadence, not a
     # pause in the room, and it split "…passenger GCS" from "13, she's confused"
     # mid-sentence — losing the GCS entirely.
-    "&utterance_end_ms=1000"
+    # 2000, not 1000. At 1000 this fires on ordinary sentence pauses inside a
+    # single turn — a live run split one EMS handoff into five separate
+    # utterances, which both fragmented the extraction and multiplied the work
+    # per clip. Turn boundaries are detected by the speaker change instead;
+    # this only needs to catch a genuine pause by the same speaker.
+    "&utterance_end_ms=2000"
     # UtteranceEnd is only emitted when interim results are on.
     + "".join(f"&keyterm={term.replace(' ', '%20')}" for term in KEYTERMS)
 )

@@ -292,24 +292,37 @@ async def _handle_finalized_segment(case: CaseState, segment: str, speaker_label
     except Exception:
         logger.exception("conflict check failed for case %s", case.case_id)
 
+    store.save()
+
     # --- tier 2: open-ended reasoning ----------------------------------------
-    # Runs on every utterance, sees the full picture read back from Medplum, and
-    # decides for itself whether anything is worth saying. It suppresses issues
-    # it has already raised, so tier 1's alert doesn't get echoed a second time.
+    # Dispatched, not awaited. Extraction and tier 1 mutate the ledger, so they
+    # have to stay strictly ordered — but tier 2 only reads context and appends
+    # an alert, so it is safe to run alongside the next utterance.
+    #
+    # This matters because the agent runs a tool loop and can take longer than
+    # the utterance that triggered it. Awaiting it made the pipeline slower than
+    # real time: a live 57s clip backed the queue up so far that the last two
+    # utterances — the allergy report and the drug order, i.e. the entire point —
+    # were still queued when the case closed and never ran at all.
+    asyncio.create_task(_run_agent_tier(case, segment))
+
+
+async def _run_agent_tier(case: CaseState, segment: str) -> None:
+    """Tier 2, off the critical path. It suppresses issues already raised, so
+    tier 1's alert never gets echoed back in the agent's own words."""
     try:
         decision = await run_agent_step(case, segment, lambda s: _emit_agent_step(case, s))
         if (
             decision.get("action_needed")
             and decision.get("alert_text")
-            # The agent tracks what it has already raised; re-speaking a standing
-            # issue every utterance is how a room learns to tune it out.
+            # Re-speaking a standing issue every utterance is how a room learns
+            # to tune the system out.
             and not decision.get("already_surfaced")
         ):
             await _speak_alert(case, make_alert(decision))
+            store.save()
     except Exception:
         logger.exception("reasoning agent failed for case %s", case.case_id)
-
-    store.save()
 
 
 @app.websocket("/ws/case/{case_id}")
