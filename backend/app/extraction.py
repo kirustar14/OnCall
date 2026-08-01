@@ -53,6 +53,11 @@ stated>, "status": "ordered" or "given", "source": <as above>}
 - "notes": any other explicitly stated case detail (age, sex, mechanism, chief complaint, PMH) \
 as a short sentence. Empty string if nothing notable.
 - "case_details": {"age": <string or "">, "sex": <string or "">, "mechanism": <string or "">}
+  A number is only an age if it is stated as one ("nineteen year old female"). A GCS, a heart \
+rate, a blood pressure, a respiratory rate or a saturation is NEVER an age, even when a segment \
+boundary leaves it stranded on its own — "GCS 13" followed by "she's confused" describes a \
+nineteen-year-old with a GCS of 13, not a thirteen-year-old. Leave "age" empty rather than \
+guessing; a wrong age is worse than a missing one.
 
 ## WORK (new items requested in this segment)
 - "task": an action someone must do. "Call respiratory", "Get two units up here".

@@ -35,8 +35,14 @@ briefing — say it is unknown, and say if nobody owns finding out.
 them.
 - Attribute anything that came from outside the team (a family member, EMS) to its source.
 - Do NOT recommend treatment. You report state; the clinician decides.
-- "spoken_brief" is what a senior clinician would actually say out loud in about thirty seconds. \
-Plain sentences, no headings, no lists."""
+
+LENGTH IS A HARD CONSTRAINT, not a style note. This is generated live while a clinician stands \
+waiting, and every word costs time before they can act.
+- "spoken_brief": 55 words MAXIMUM. Plain sentences, no headings, no lists. Lead with who the \
+patient is and the single most important thing, then what nobody owns.
+- Every other field: AT MOST 4 entries, each ONE short line. Pick what changes what the reader \
+does next and drop the rest. An exhaustive list is not a handoff — it is a transcript with \
+bullet points, which is the thing this exists to replace."""
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -94,7 +100,11 @@ async def build_handoff(case: CaseState) -> dict:
             model=CLAUDE_MODEL,
             max_tokens=4096,
             output_config={
-                "effort": "medium",
+                # Low, not medium. This is triggered live in front of a room and
+                # the difference was ~19s versus a few — synthesising a briefing
+                # from an already-structured record is not a reasoning-hard task,
+                # and nobody stands in silence for twenty seconds.
+                "effort": "low",
                 "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA},
             },
             system=[
@@ -112,7 +122,29 @@ async def build_handoff(case: CaseState) -> dict:
         return json.loads(text)
 
     try:
-        return await asyncio.to_thread(_call)
+        return _clamp(await asyncio.to_thread(_call))
     except Exception:
         logger.exception("handoff generation failed for case %s", case.case_id)
         return dict(EMPTY_BRIEF, spoken_brief="Handoff generation failed.")
+
+
+MAX_ITEMS = 4
+MAX_SPOKEN_WORDS = 60
+
+
+def _clamp(brief: dict) -> dict:
+    """Backstop the length limits the prompt asks for.
+
+    A briefing that overruns isn't just slow to generate — it's slow to *hear*,
+    and the clinician it's for is standing there waiting.
+    """
+    for key in ("what_we_know", "what_we_think", "what_has_been_done", "what_is_pending"):
+        brief[key] = (brief.get(key) or [])[:MAX_ITEMS]
+
+    # Unresolved gets more room; it's the part nobody else is tracking.
+    brief["unresolved"] = (brief.get("unresolved") or [])[: MAX_ITEMS + 2]
+
+    words = (brief.get("spoken_brief") or "").split()
+    if len(words) > MAX_SPOKEN_WORDS:
+        brief["spoken_brief"] = " ".join(words[:MAX_SPOKEN_WORDS]).rstrip(",;") + "."
+    return brief

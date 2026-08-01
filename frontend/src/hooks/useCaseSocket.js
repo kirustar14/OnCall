@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { startAudioCapture, stopAudioCapture } from '../lib/audioCapture';
+import { startFilePlayback } from '../lib/filePlayback';
 
 const WS_BASE = import.meta.env.VITE_WS_BASE || `ws://${window.location.hostname}:8000`;
 const API_BASE = import.meta.env.VITE_API_BASE || `http://${window.location.hostname}:8000`;
@@ -40,10 +41,17 @@ export function useCaseSocket(caseId) {
   const [unownedPrompt, setUnownedPrompt] = useState(null);
   const [handoffBrief, setHandoffBrief] = useState(null);
   const [handoffLoading, setHandoffLoading] = useState(false);
+  // 'mic' streams the room. 'file' streams a rehearsed clip through the very
+  // same socket — deterministic in a loud venue, and nothing about the pipeline
+  // downstream can tell the difference.
+  const [inputMode, setInputModeState] = useState('mic');
+  const [playback, setPlayback] = useState(null); // { name, progress, duration }
 
   const wsRef = useRef(null);
   const audioCaptureRef = useRef(null);
   const mediaStreamRef = useRef(null);
+  const inputModeRef = useRef('mic');
+  const playbackRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +118,9 @@ export function useCaseSocket(caseId) {
         ws.onopen = async () => {
           if (cancelled) return;
           setStatus('recording');
+          // In file mode the mic stays closed, so a clip playing out loud can't
+          // be picked up twice.
+          if (inputModeRef.current !== 'mic') return;
           try {
             audioCaptureRef.current = await startAudioCapture(media, (buf) => {
               if (ws.readyState === WebSocket.OPEN) ws.send(buf);
@@ -141,11 +152,80 @@ export function useCaseSocket(caseId) {
       cancelled = true;
       stopAudioCapture(audioCaptureRef.current);
       audioCaptureRef.current = null;
+      playbackRef.current?.stop();
+      playbackRef.current = null;
       if (mediaStreamRef.current) mediaStreamRef.current.getTracks().forEach((t) => t.stop());
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) wsRef.current.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseId]);
+
+  const setInputMode = useCallback(async (mode) => {
+    inputModeRef.current = mode;
+    setInputModeState(mode);
+
+    if (mode === 'file') {
+      stopAudioCapture(audioCaptureRef.current);
+      audioCaptureRef.current = null;
+      return;
+    }
+
+    // Back to the room: stop any clip and reopen the mic.
+    playbackRef.current?.stop();
+    playbackRef.current = null;
+    setPlayback(null);
+
+    const ws = wsRef.current;
+    const media = mediaStreamRef.current;
+    if (!ws || !media || audioCaptureRef.current) return;
+    try {
+      audioCaptureRef.current = await startAudioCapture(media, (buf) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(buf);
+      });
+    } catch (err) {
+      console.error('failed to reopen mic', err);
+    }
+  }, []);
+
+  const playFile = useCallback(async (file) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.warn('socket not open; cannot play file');
+      return;
+    }
+
+    // Never let a clip and the mic feed the socket at once.
+    inputModeRef.current = 'file';
+    setInputModeState('file');
+    stopAudioCapture(audioCaptureRef.current);
+    audioCaptureRef.current = null;
+    playbackRef.current?.stop();
+
+    setPlayback({ name: file.name, progress: 0, duration: 0 });
+    try {
+      playbackRef.current = await startFilePlayback(
+        file,
+        (buf) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(buf);
+        },
+        {
+          audible: true,
+          onProgress: (progress, duration) =>
+            setPlayback((p) => (p ? { ...p, progress, duration } : p)),
+          onEnded: () => setPlayback((p) => (p ? { ...p, progress: 1 } : p)),
+        },
+      );
+    } catch (err) {
+      console.error('file playback failed', err);
+      setPlayback(null);
+    }
+  }, []);
+
+  const stopPlayback = useCallback(() => {
+    playbackRef.current?.stop();
+    playbackRef.current = null;
+    setPlayback(null);
+  }, []);
 
   const endCase = useCallback(() => {
     const ws = wsRef.current;
@@ -155,6 +235,8 @@ export function useCaseSocket(caseId) {
     }
     stopAudioCapture(audioCaptureRef.current);
     audioCaptureRef.current = null;
+    playbackRef.current?.stop();
+    playbackRef.current = null;
     if (mediaStreamRef.current) mediaStreamRef.current.getTracks().forEach((t) => t.stop());
     setStatus('closed');
   }, []);
@@ -207,9 +289,14 @@ export function useCaseSocket(caseId) {
     unownedPrompt,
     handoffBrief,
     handoffLoading,
+    inputMode,
+    playback,
     endCase,
     assignSpeakerRole,
     requestHandoff,
+    setInputMode,
+    playFile,
+    stopPlayback,
     dismissHandoff: () => setHandoffBrief(null),
   };
 }

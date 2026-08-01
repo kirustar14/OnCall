@@ -811,3 +811,150 @@ body {
   color: #a08683;
   margin-left: auto;
 }
+
+/* ---------- audio source ---------- */
+
+.audio-source {
+  margin-top: 16px;
+  background: #14161b;
+  border: 1px solid #262a33;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.audio-source-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.audio-source-head h4 {
+  margin: 0;
+  flex: 1;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8a919e;
+}
+
+.source-badge {
+  font-size: 9.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.source-badge.mic {
+  background: #2e0f12;
+  color: #ff8a80;
+  border: 1px solid #b3261e;
+}
+
+.source-badge.file {
+  background: #1b2b47;
+  color: #7fa8e8;
+  border: 1px solid #2a3a6a;
+}
+
+.audio-source-modes {
+  display: flex;
+  gap: 6px;
+}
+
+.audio-source-modes button {
+  flex: 1;
+  background: #1b1e25;
+  border: 1px solid #262a33;
+  color: #c6cad3;
+  border-radius: 5px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.audio-source-modes button:hover {
+  background: #232833;
+}
+
+.audio-source-modes button.on {
+  background: #0f3d33;
+  border-color: #35d0a5;
+  color: #35d0a5;
+}
+
+.audio-source-file {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #262a33;
+}
+
+.play-btn,
+.stop-btn {
+  width: 100%;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid;
+}
+
+.play-btn {
+  background: #0f3d33;
+  border-color: #35d0a5;
+  color: #35d0a5;
+  font-weight: 600;
+}
+
+.play-btn:hover {
+  background: #14503f;
+}
+
+.stop-btn {
+  background: #4a1418;
+  border-color: #b3261e;
+  color: #ffd6d3;
+  font-weight: 600;
+}
+
+.playback-status {
+  margin-top: 9px;
+}
+
+.playback-name {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #8a919e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playback-bar {
+  height: 4px;
+  background: #262a33;
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 5px 0 4px;
+}
+
+.playback-fill {
+  height: 100%;
+  background: #35d0a5;
+  transition: width 120ms linear;
+}
+
+.playback-meta {
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #5b616c;
+}
+
+.audio-source-note {
+  margin: 9px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #5b616c;
+}

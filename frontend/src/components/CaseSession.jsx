@@ -3,6 +3,7 @@ import VideoPreview from './VideoPreview';
 import Ledger from './Ledger';
 import HandoffPanel from './HandoffPanel';
 import SpeakerRoles from './SpeakerRoles';
+import AudioSource from './AudioSource';
 
 function StatusBadge({ status }) {
   const label = {
@@ -45,9 +46,14 @@ export default function CaseSession({ caseId, active }) {
     unownedPrompt,
     handoffBrief,
     handoffLoading,
+    inputMode,
+    playback,
     endCase,
     assignSpeakerRole,
     requestHandoff,
+    setInputMode,
+    playFile,
+    stopPlayback,
     dismissHandoff,
   } = useCaseSocket(caseId);
 
@@ -102,6 +108,14 @@ export default function CaseSession({ caseId, active }) {
               </button>
             )}
           </div>
+
+          <AudioSource
+            inputMode={inputMode}
+            playback={playback}
+            onModeChange={setInputMode}
+            onPlayFile={playFile}
+            onStop={stopPlayback}
+          />
 
           <SpeakerRoles
             speakers={speakers}
