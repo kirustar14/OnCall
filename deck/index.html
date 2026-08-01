@@ -630,7 +630,78 @@ em{font-style:italic;color:var(--ink)}
     </div>
   </section>
 
-  <!-- ══════════ 10 · unowned work — recreated product UI ══════════ -->
+  <!-- ══════════ 10 · the FHIR resource graph ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">The data model</p>
+      <h2>Every fact lands on a resource FHIR already defines.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 640" role="img"
+           aria-label="The FHIR resource graph: Patient and Encounter above, Observation, AllergyIntolerance, MedicationRequest and Task below, each carrying a Provenance">
+        <g data-b data-fx="fade">
+          <rect class="box" x="520" y="0" width="250" height="88" rx="16"/>
+          <text class="dH" x="552" y="54">Patient</text>
+          <rect class="box" x="880" y="0" width="300" height="88" rx="16"/>
+          <text class="dH" x="912" y="44">Encounter</text>
+          <text class="dM" x="912" y="72">the case</text>
+          <path class="edge" d="M 880 44 H 782" marker-end="url(#ah)"/>
+          <text class="dL" x="831" y="20" text-anchor="middle">SUBJECT</text>
+        </g>
+
+        <!-- reference bus: a shared trunk rather than four lines meeting at a point -->
+        <g data-b data-fx="fade">
+          <text class="dL" x="0" y="146">REFERENCES</text>
+          <path class="edge" d="M 197 200 V 140 H 1487 V 200"/>
+          <path class="edge" d="M 622 200 V 140"/>
+          <path class="edge" d="M 1047 200 V 140"/>
+          <path class="edge" d="M 1030 140 V 88" marker-end="url(#ah)"/>
+        </g>
+
+        <g data-b>
+          <rect class="box" x="0" y="200" width="395" height="140" rx="16"/>
+          <text class="dH" x="32" y="250">Observation</text>
+          <text class="dM" x="32" y="288">HR 122 · BP 104/68</text>
+          <text class="dM" x="32" y="316">GCS 13</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="425" y="200" width="395" height="140" rx="16"/>
+          <text class="dH" x="457" y="250">AllergyIntolerance</text>
+          <text class="dM" x="457" y="288">penicillin</text>
+          <text class="dM" x="457" y="316">anaphylaxis · high</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="850" y="200" width="395" height="140" rx="16"/>
+          <text class="dH" x="882" y="250">MedicationRequest</text>
+          <text class="dM" x="882" y="288">ampicillin-sulbactam</text>
+          <text class="dM" x="882" y="316">3 g IV</text>
+        </g>
+        <g data-b>
+          <rect class="box-hot" x="1275" y="200" width="425" height="140" rx="16"/>
+          <text class="dH" x="1307" y="250">Task</text>
+          <text class="dMh" x="1307" y="288">owner → Practitioner</text>
+          <text class="dM" x="1307" y="316">left off entirely when unowned</text>
+        </g>
+
+        <g data-b data-fx="fade">
+          <text class="dL" x="0" y="436">AND EACH CARRIES</text>
+          <path class="edge" d="M 197 340 V 430 H 1487 V 340"/>
+          <path class="edge" d="M 622 340 V 430"/>
+          <path class="edge" d="M 1047 340 V 430"/>
+          <path class="edge" d="M 850 430 V 492" marker-end="url(#ah)"/>
+        </g>
+
+        <g data-b data-fx="scale">
+          <rect class="box-strong" x="500" y="500" width="700" height="140" rx="16"/>
+          <text class="dH" x="532" y="550">Provenance</text>
+          <text class="dM" x="532" y="588">agent.who → the agent Device</text>
+          <text class="dMh" x="532" y="618">agent.onBehalfOf → the human source</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ══════════ 11 · unowned work — recreated product UI ══════════ -->
   <section class="s mid">
     <div class="shead">
       <p class="lbl">The hard part</p>
@@ -754,6 +825,11 @@ const NOTES = [
 `<p>Every fact lands as real FHIR, not a JSON blob.</p>
 <p><span class="beat">Point at the bottom row.</span> The mother stays the source, the nurse stays the relay. <strong>That's what lets a clinician review the basis instead of trusting us.</strong></p>
 <p>Note the top row too: the substance is stored bare, with reaction and severity in separate fields. That's what makes the class lookup on the next slide possible at all.</p>`,
+
+`<p>Widen out from that one sentence to the whole case.</p>
+<p><span class="beat">Sweep the middle row.</span> Observation, AllergyIntolerance, MedicationRequest, Task. <strong>Not one of these is a table we designed — FHIR already defines every one of them, and Medplum already stores and searches them.</strong></p>
+<p><span class="beat">Point at Task, on the right.</span> When nobody is named, owner is left off the resource entirely rather than set to whoever happened to be talking. That single decision is what makes the next slide work.</p>
+<p>And the bottom: every resource carries a Provenance, so nothing here is an assertion you have to take on trust.</p>`,
 
 `<p>This is the payoff for modelling it properly.</p>
 <p><span class="beat">Read the query out loud.</span> owner:missing=true is a standard FHIR search modifier. <strong>We didn't invent an "unowned" flag and we don't maintain one.</strong></p>
