@@ -22,12 +22,15 @@ struct OnCallGlassesApp: App {
         // configure() also validates the bundle identifier and display name
         // against what was registered in the Meta developer console — a
         // mismatch fails here rather than at pairing time.
+        var configureError: String?
         do {
             try Wearables.configure()
         } catch {
+            configureError = String(describing: error)
             NSLog("[OnCall] Wearables.configure() failed: \(error)")
         }
-        _streamer = State(initialValue: GlassesStreamer(wearables: Wearables.shared))
+        _streamer = State(initialValue: GlassesStreamer(wearables: Wearables.shared,
+                                                        configureError: configureError))
     }
 
     var body: some Scene {
@@ -66,6 +69,7 @@ struct ContentView: View {
                 }
 
                 Section("Glasses") {
+                    LabeledContent("Step", value: streamer.step)
                     LabeledContent("Registration", value: streamer.registration)
                     LabeledContent("Stream", value: streamer.streamState)
                     LabeledContent("Frames received", value: "\(streamer.framesReceived)")

@@ -42,6 +42,10 @@ final class GlassesStreamer {
 
     // MARK: - Observable state
 
+    /// Where start() actually got to. Every step reports, because the SDK's
+    /// failure modes are silent: an unregistered device simply never emits,
+    /// and the session call that follows would wait forever.
+    private(set) var step: String = "idle"
     private(set) var registration: String = "unknown"
     private(set) var streamState: String = "stopped"
     private(set) var framesReceived: Int = 0
@@ -71,8 +75,13 @@ final class GlassesStreamer {
     private var lastPostAt: Date = .distantPast
     private var posting = false
 
-    init(wearables: any WearablesInterface) {
+    init(wearables: any WearablesInterface, configureError: String? = nil) {
         self.wearables = wearables
+        if let configureError {
+            // Without this the app launches, looks fine, and nothing ever works.
+            self.lastError = "Wearables.configure() failed: \(configureError)"
+            self.step = "SDK not configured"
+        }
         observeRegistration()
     }
 
@@ -101,6 +110,7 @@ final class GlassesStreamer {
 
     func start() async {
         lastError = nil
+        step = "creating selector"
         do {
             // Hold the selector — see the note on the property.
             // No capability predicate: the SDK exposes supportsDisplay() on a
@@ -113,17 +123,42 @@ final class GlassesStreamer {
             )
             deviceSelector = selector
 
-            // Wait for the selector to actually resolve a device before creating
-            // the session. createSession() called before the first
+            // Wait for the selector to resolve a device before creating the
+            // session: createSession() called before the first
             // activeDeviceStream emission throws noEligibleDevice even when a
             // suitable device is connected.
-            for await activeID in selector.activeDeviceStream() {
-                if activeID != nil { break }
+            //
+            // Bounded, because if the glasses are not registered the stream
+            // simply never emits — and an unbounded await here looks exactly
+            // like a button that does nothing.
+            step = "waiting for a device"
+            let resolved = await withTaskGroup(of: Bool.self) { group -> Bool in
+                group.addTask {
+                    for await activeID in selector.activeDeviceStream()
+                    where activeID != nil { return true }
+                    return false
+                }
+                group.addTask {
+                    try? await Task.sleep(for: .seconds(12))
+                    return false
+                }
+                let first = await group.next() ?? false
+                group.cancelAll()
+                return first
+            }
+
+            guard resolved else {
+                step = "no device"
+                lastError = "No glasses became active in 12s. Registration is "
+                    + "\(registration) — pair first, and check they are connected in Meta AI."
+                return
             }
 
             // createSession is synchronous-throwing in v0.7.0.
+            step = "creating session"
             let newSession = try wearables.createSession(deviceSelector: selector)
             deviceSession = newSession
+            step = "starting session"
             try await newSession.start()
 
             // .raw so frames arrive as decoded CVPixelBuffers. .hvc1 delivers
@@ -134,8 +169,10 @@ final class GlassesStreamer {
                 resolution: .low,      // 360x640 — ample for a look-back frame
                 frameRate: 15
             )
+            step = "adding camera stream"
             guard let newStream = try newSession.addStream(config: config) else {
-                lastError = "could not add camera stream"
+                step = "no stream"
+                lastError = "addStream returned nil — the device session has no camera capability."
                 return
             }
             stream = newStream
@@ -151,10 +188,12 @@ final class GlassesStreamer {
                 Task { @MainActor in self?.handle(frame) }
             })
 
+            step = "starting stream"
             await newStream.start()
             streamState = "starting"
         } catch {
-            lastError = "start failed: \(error)"
+            step = "failed"
+            lastError = "\(step) failed: \(error)"
             log.error("start failed: \(String(describing: error))")
         }
     }
