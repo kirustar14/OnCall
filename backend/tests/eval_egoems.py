@@ -39,7 +39,7 @@ import jiwer
 from app.deepgram_stt import DeepgramSTTSession
 
 EGOEMS = os.path.expanduser(
-    "~/oncall-eval/EgoEMS/Benchmarks/ActionRecognition/Audio/manual_check_transcripts"
+    "~/servare-eval/EgoEMS/Benchmarks/ActionRecognition/Audio/manual_check_transcripts"
 )
 SAMPLE_RATE = 16000
 # Audio is streamed faster than real time. Deepgram's endpointing works off
@@ -132,8 +132,16 @@ def decode_to_pcm(mp3_path: str) -> bytes:
 # --- our system --------------------------------------------------------------
 
 
-async def transcribe(pcm: bytes) -> tuple[str, list[tuple[int | None, str]]]:
-    """Stream PCM through the exact session class the server uses."""
+async def transcribe_stream(pcm: bytes, speedup: float) -> tuple[str, list[tuple[int | None, str]]]:
+    """Stream PCM through the exact session class the server uses.
+
+    IMPORTANT: speedup must stay at 1.0 for a valid number. Measured on
+    GX010387 (360 s, 615 gold words): 20x returned 31 words, 4x returned 283,
+    1x returns the lot. Deepgram's streaming socket expects roughly real-time
+    audio and silently drops the excess rather than erroring — so an
+    accelerated run produces a plausible-looking transcript and a meaningless
+    WER. This cost an entire eval round; do not "optimise" it back.
+    """
     segments: list[tuple[int | None, str]] = []
 
     async def on_transcript(text, is_final, speaker=None):
@@ -143,14 +151,56 @@ async def transcribe(pcm: bytes) -> tuple[str, list[tuple[int | None, str]]]:
     session = DeepgramSTTSession(on_transcript=on_transcript)
     await session.start()
     chunk = SAMPLE_RATE * 2 // 10  # 100 ms
-    delay = 0.1 / SPEEDUP
+    delay = 0.1 / speedup
     for i in range(0, len(pcm), chunk):
         await session.send_audio(pcm[i : i + chunk])
         await asyncio.sleep(delay)
-    await asyncio.sleep(3.0)  # let trailing finals land
+    await asyncio.sleep(4.0)  # let trailing finals land
     await session.finish()
 
     return " ".join(t for _, t in segments), segments
+
+
+async def transcribe_batch(mp3_path: str) -> tuple[str, list[tuple[int | None, str]]]:
+    """Deepgram prerecorded, same model and keyterms as the live path.
+
+    This is the apples-to-apples comparison against EgoEMS's published
+    Whisper / Gemini / Google baselines, which are all batch systems.
+    """
+    import httpx
+
+    from app.config import DEEPGRAM_API_KEY
+    from app.deepgram_stt import KEYTERMS
+
+    params = [
+        ("model", "nova-3-medical"),
+        ("smart_format", "true"),
+        ("punctuate", "true"),
+        ("diarize", "true"),
+        ("language", "en-US"),
+    ] + [("keyterm", t) for t in KEYTERMS]
+
+    with open(mp3_path, "rb") as fh:
+        audio = fh.read()
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        resp = await client.post(
+            "https://api.deepgram.com/v1/listen",
+            params=params,
+            headers={
+                "Authorization": f"Token {DEEPGRAM_API_KEY}",
+                "Content-Type": "audio/mpeg",
+            },
+            content=audio,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    alt = data["results"]["channels"][0]["alternatives"][0]
+    words = alt.get("words") or []
+    speakers = {w.get("speaker") for w in words if isinstance(w.get("speaker"), int)}
+    segments = [(s, "") for s in speakers]
+    return alt.get("transcript", ""), segments
 
 
 # --- clinical term recall ----------------------------------------------------
@@ -182,6 +232,8 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dirs", nargs="*", default=None, help="subset dirs, e.g. wa1 ng8")
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--mode", choices=["batch", "stream"], default="batch")
+    ap.add_argument("--speedup", type=float, default=1.0, help="stream only; MUST be 1.0 to be valid")
     args = ap.parse_args()
 
     pattern = os.path.join(EGOEMS, "*", "*_human.json")
@@ -214,7 +266,10 @@ async def main() -> int:
         secs = len(pcm) / (SAMPLE_RATE * 2)
 
         t0 = time.time()
-        pred_text, segments = await transcribe(pcm)
+        if args.mode == "batch":
+            pred_text, segments = await transcribe_batch(mp3)
+        else:
+            pred_text, segments = await transcribe_stream(pcm, args.speedup)
         elapsed = time.time() - t0
 
         our_wer = get_wer(gold_text, pred_text) if pred_text.strip() else 1.0

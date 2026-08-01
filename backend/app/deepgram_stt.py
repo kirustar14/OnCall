@@ -23,17 +23,21 @@ logger = logging.getLogger("oncall.deepgram_stt")
 # these come back mangled ("ampicillin-sulbactam" is the whole intervention) —
 # and keyterm requires nova-3, which is also the clinically-tuned model.
 KEYTERMS = [
+    # Brand names are the ones that need this most: they are short, they carry no
+    # morphological hint, and the model has no phonetic neighbourhood to fall back
+    # on. Untermed, "Unasyn" came back as "anus in" — which is both unusable and
+    # not something to have on screen in front of a room.
+    "Unasyn",
     "ampicillin-sulbactam",
     "penicillin",
     "anaphylaxis",
     "clindamycin",
     "gentamicin",
     "vancomycin",
-    "anticoagulated",
+    "cefazolin",
+    "blood thinners",
     "tranexamic acid",
-    "Medic",
     "GCS thirteen",
-    "tibia",
     "fentanyl",
     "GCS",
     "ortho",

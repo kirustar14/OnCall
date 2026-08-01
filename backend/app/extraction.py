@@ -51,6 +51,14 @@ packed into it cause the check to silently miss a real contraindication.
 "value": <e.g. "120/80">, "source": <as above>}
 - "medications": medications ordered or given. Each: {"name": <drug, include dose/route if \
 stated>, "status": "ordered" or "given", "source": <as above>}
+  NEVER repair a drug name into one that was not said. Transcription of an unfamiliar brand name \
+fails badly, and a garbled token beside a dose ("give anus in, three grams, I V") is a drug you \
+could not make out, not an invitation to supply a plausible one. Observed failure: that exact \
+text was recorded as "Cefazolin 3 g IV", a drug nobody in the room had named. Downstream this \
+field is checked against the patient's allergies, so an invented name produces a confident, \
+FDA-stamped warning about a medication that does not exist, and hides the one that does. Write \
+the drug ONLY if you actually heard it; if the name is unintelligible, transcribe what was said \
+verbatim and leave it at that. A close phonetic match to a real drug is still a guess.
 - "notes": any other explicitly stated case detail (age, sex, mechanism, chief complaint, PMH) \
 as a short sentence. Empty string if nothing notable.
 - "case_details": {"name": <string or "">, "age": <string or "">, "sex": <string or "">, \
