@@ -113,13 +113,16 @@ final class GlassesStreamer {
         step = "creating selector"
         do {
             // Hold the selector — see the note on the property.
-            // No capability predicate: the SDK exposes supportsDisplay() on a
-            // Device but nothing equivalent for the camera — camera access is an
-            // extension on DeviceSession, so it is discovered by opening the
-            // session rather than by filtering beforehand.
+            // Filter on supportsDisplay(), matching the working RARE-Insight
+            // integration. There is no supportsCamera() predicate — camera
+            // access is an extension on DeviceSession — and on Ray-Ban Display
+            // the camera shares the same session the display owns, so the
+            // display capability is the right proxy for "this is the device".
+            // Selecting with no predicate at all picks up whatever is paired,
+            // including devices that cannot serve a camera stream.
             let selector = AutoDeviceSelector(
                 wearables: wearables,
-                filter: { _ in true }
+                filter: { $0.supportsDisplay() }
             )
             deviceSelector = selector
 
