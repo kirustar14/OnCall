@@ -15,7 +15,7 @@ import os
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-OUT_DIR = "/tmp/servare-frames"
+OUT_DIR = "/tmp/oncall-frames"
 SIZE = (960, 640)
 
 

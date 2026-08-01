@@ -5,6 +5,7 @@ import Ledger from './Ledger';
 import HandoffPanel from './HandoffPanel';
 import SpeakerRoles from './SpeakerRoles';
 import AudioSource from './AudioSource';
+import AudioDevices from './AudioDevices';
 import PovLook from './PovLook';
 
 function StatusBadge({ status }) {
@@ -53,6 +54,8 @@ export default function CaseSession({ caseId, active, onAgentStep }) {
     lastLook,
     looking,
     look,
+    setAudioInput,
+    setAudioOutput,
     endCase,
     assignSpeakerRole,
     requestHandoff,
@@ -170,6 +173,11 @@ export default function CaseSession({ caseId, active, onAgentStep }) {
             looking={looking}
             onLook={look}
             disabled={status === 'closed'}
+          />
+
+          <AudioDevices
+            onInputChange={setAudioInput}
+            onOutputChange={setAudioOutput}
           />
 
           <AudioSource

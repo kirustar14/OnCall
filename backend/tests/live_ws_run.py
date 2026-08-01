@@ -17,7 +17,7 @@ import wave
 import httpx
 import websockets
 
-WAV = "/tmp/servare-audio/demo-script.wav"
+WAV = "/tmp/oncall-audio/demo-script.wav"
 CASE = "livecase"
 ROLES = [(0, "MEDIC"), (1, "DR. REYES"), (2, "NURSE OKAFOR")]
 

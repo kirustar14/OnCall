@@ -21,22 +21,47 @@ import httpx
 from app.config import DEEPGRAM_API_KEY
 
 SAMPLE_RATE = 16000
-OUT_DIR = "/tmp/servare-audio"
+OUT_DIR = "/tmp/oncall-audio"
 
 # Distinct voices so diarization has something to separate. Two male, one
 # female — closer to a real bay than three obviously different voices.
 VOICE = {
     "MEDIC": "aura-2-apollo-en",
-    "DR. REYES": "aura-orion-en",
-    "NURSE OKAFOR": "aura-2-thalia-en",
+    "DR. LEE": "aura-orion-en",
+    "NURSE KATE": "aura-2-thalia-en",
 }
 
+# Written to be said out loud by a nervous human in a loud room, not read off a
+# chart. Every word that a presenter could stumble on, or that Deepgram got
+# wrong in testing, has been swapped for a plainer one that carries the same
+# clinical beat:
+#
+#   "Medic 6"              transcribed as "Lennox six", and the extractor then
+#                          took "Lennox" for the patient's name. The callsign
+#                          earns nothing here, so the line just opens with the
+#                          patient.
+#   "anticoagulated"       -> "on blood thinners"
+#   "tibia", "gross        -> "leg", "the wound is dirty"
+#    contamination"
+#   "ampicillin sulbactam" -> "Unasyn", its brand name
+#   "Ava Lennox"           -> "Emma", one short common name
+#
+# Unasyn is the important one, and it makes the demo stronger rather than
+# weaker. It is the same drug, and NIH RxNav still resolves it to the FDA class
+# "Penicillin-class Antibacterial" — but unlike "ampicillin sulbactam" there is
+# nothing in the word for a human or a string match to catch. The alert can only
+# come from actually resolving the drug.
+#
+# The clinical beats are unchanged: vitals and GCS, an open contaminated
+# fracture with no antibiotic, three requests of which only one gets claimed,
+# an allergy that arrives secondhand from a relative, and an order that
+# collides with it.
 SCRIPT = [
-    ("MEDIC", "Medic 6, second patient, same collision. Nineteen year old female, front seat passenger. G C S thirteen, she's confused, she can't give us a history. Open left tibia fracture, gross contamination at the wound. Heart rate one twenty two, blood pressure one oh four over sixty eight, respirations twenty two, sat ninety seven on four liters. Splinted in the field, no antibiotics given."),
-    ("DR. REYES", "Okay, someone find out whether she's anticoagulated, get ortho down here, and repeat that pressure in five minutes."),
-    ("NURSE OKAFOR", "I've got ortho, I'm calling them now."),
-    ("NURSE OKAFOR", "Doctor Reyes, I just spoke with the patient's mother in the waiting room. She says Ava has a severe penicillin allergy. Anaphylaxis as a child, she was hospitalized for it."),
-    ("DR. REYES", "Alright, wound's contaminated, she needs coverage now. Let's get ampicillin sulbactam, three grams I V, push it."),
+    ("MEDIC", "Second patient from the same crash. Nineteen year old woman, front seat. G C S thirteen, she's confused, she can't tell us anything. Open fracture, left leg, and the wound is dirty. Heart rate one twenty two, blood pressure one oh four over sixty eight, breathing twenty two, oxygen ninety seven on four liters. We splinted it. No antibiotics yet."),
+    ("DR. LEE", "Okay. Someone find out if she's on blood thinners, get ortho down here, and repeat that pressure in five minutes."),
+    ("NURSE KATE", "I've got ortho. Calling them now."),
+    ("NURSE KATE", "Doctor Lee, I just spoke to Emma's mother in the waiting room. Emma has a severe penicillin allergy. She had anaphylaxis as a child and ended up in hospital."),
+    ("DR. LEE", "Alright, that wound is dirty, she needs cover now. Let's give Unasyn, three grams, I V."),
 ]
 
 

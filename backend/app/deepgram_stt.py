@@ -17,7 +17,7 @@ import websockets
 
 from app.config import DEEPGRAM_API_KEY
 
-logger = logging.getLogger("servare.deepgram_stt")
+logger = logging.getLogger("oncall.deepgram_stt")
 
 # Terms the ledger depends on getting exactly right. Without keyterm prompting
 # these come back mangled ("ampicillin-sulbactam" is the whole intervention) —

@@ -22,7 +22,7 @@ from typing import Optional
 
 import httpx
 
-logger = logging.getLogger("servare.rxnav")
+logger = logging.getLogger("oncall.rxnav")
 
 BASE = "https://rxnav.nlm.nih.gov/REST"
 TIMEOUT = 6.0

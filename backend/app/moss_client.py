@@ -1,7 +1,7 @@
 """moss.dev semantic search: a fast fuzzy-recall layer over everything captured
 for a patient, across every case they've been in — complementary to Medplum
 (structured FHIR, stays the source of truth) and to search_patient_history's
-exact Medplum lookups. One dedicated index ("servare-patient-context"),
+exact Medplum lookups. One dedicated index ("oncall-patient-context"),
 separate from the account's auto-generated onboarding starter index. One
 MossClient instance, constructed lazily and reused for the app's lifetime.
 
@@ -34,9 +34,9 @@ except ImportError:  # pragma: no cover — environment-dependent
 
 from app.config import MOSS_PROJECT_ID, MOSS_PROJECT_KEY
 
-logger = logging.getLogger("servare.moss_client")
+logger = logging.getLogger("oncall.moss_client")
 
-INDEX_NAME = "servare-patient-context"
+INDEX_NAME = "oncall-patient-context"
 
 _RETRY_ATTEMPTS = 5
 _RETRY_BASE_DELAY = 1.0
@@ -103,7 +103,7 @@ class MossPatientContext:
                     # Doesn't exist yet. create_index requires >=1 seed doc.
                     seed = moss.DocumentInfo(
                         id=str(uuid.uuid4()),
-                        text="Servare patient-context index initialized.",
+                        text="OnCall patient-context index initialized.",
                         metadata={
                             "case_id": "system",
                             "patient_name": "",

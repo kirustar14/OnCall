@@ -7,7 +7,7 @@ import logging
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
-logger = logging.getLogger("servare.ws_manager")
+logger = logging.getLogger("oncall.ws_manager")
 
 
 class WSManager:

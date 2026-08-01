@@ -18,7 +18,7 @@ from app.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 from app.medplum_client import medplum_client
 from app.moss_client import moss_client
 
-logger = logging.getLogger("servare.extraction")
+logger = logging.getLogger("oncall.extraction")
 
 _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 
@@ -55,8 +55,12 @@ stated>, "status": "ordered" or "given", "source": <as above>}
 as a short sentence. Empty string if nothing notable.
 - "case_details": {"name": <string or "">, "age": <string or "">, "sex": <string or "">, \
 "mechanism": <string or "">}
-  "name" is the patient's own name, only when someone states it ("this is Ava Lennox", "the \
-mother says Ava has..."). Never a clinician's name, and never a guess.
+  "name" is the patient's own name, and only when someone actually states it as such ("this is \
+Ava Lennox", "the mother says Ava has..."). It is NEVER a clinician's name, a crew member's, or \
+a unit callsign: an EMS handoff opens by identifying the ambulance, not the patient, so "Medic 6" \
+and anything a garbled transcript makes of it is the crew, not a name. Leave it empty rather than \
+guessing; the wrong name is worse than none, because it silently attaches this patient's facts to \
+somebody else's record.
   A number is only an age if it is stated as one ("nineteen year old female"). A GCS, a heart \
 rate, a blood pressure, a respiratory rate or a saturation is NEVER an age, even when a segment \
 boundary leaves it stranded on its own — "GCS 13" followed by "she's confused" describes a \

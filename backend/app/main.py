@@ -26,9 +26,9 @@ from app.watchdog import watchdog_loop
 from app.ws_manager import ws_manager
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("servare.main")
+logger = logging.getLogger("oncall.main")
 
-app = FastAPI(title="Servare")
+app = FastAPI(title="OnCall")
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,11 +46,11 @@ _watchdog_task: asyncio.Task | None = None
 async def _reapply_logging_config():
     # uvicorn's own logging setup runs after this module is imported and disables
     # loggers created before it (disable_existing_loggers=True) — reapply so our
-    # app logs (servare.*) actually show up under `uvicorn` / `uvicorn --reload`.
+    # app logs (oncall.*) actually show up under `uvicorn` / `uvicorn --reload`.
     for name in list(logging.root.manager.loggerDict):
-        if name.startswith("servare"):
+        if name.startswith("oncall"):
             logging.getLogger(name).disabled = False
-    logging.getLogger("servare").setLevel(logging.INFO)
+    logging.getLogger("oncall").setLevel(logging.INFO)
 
     # A resuscitation doesn't pause because a process restarted.
     restored = store.load()

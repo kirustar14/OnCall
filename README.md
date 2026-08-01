@@ -1,6 +1,6 @@
-# Servare
+# OnCall
 
-**Servare listens to the room, keeps the record nobody has time to write, and speaks up only
+**OnCall listens to the room, keeps the record nobody has time to write, and speaks up only
 when the room contradicts itself.**
 
 A trauma bay produces more facts per minute than any one person can hold, and almost none of
@@ -8,7 +8,7 @@ them get written down while they still matter. A detail said once at 2am. A task
 voice with no ticket behind it. An hour of context the person arriving at shift change simply
 does not have. The failure is not skill. It is that spoken information has no memory.
 
-Servare gives it one. Voice in, voice out. Nobody stops to type, and there is no screen anyone
+OnCall gives it one. Voice in, voice out. Nobody stops to type, and there is no screen anyone
 has to look at.
 
 ## What it does
@@ -49,7 +49,7 @@ enumerate ahead of time. It never writes to the ledger and never promotes itself
 
 ## What it will not do
 
-Servare states facts and where they came from. It does **not** recommend treatment. No suggested
+OnCall states facts and where they came from. It does **not** recommend treatment. No suggested
 alternative drug, no "give this instead". When an ordered medication belongs to a class the
 patient is documented allergic to, it says exactly that, names when the allergy was recorded and
 who it came from, and stops. The clinician draws the conclusion.
@@ -155,8 +155,8 @@ surfaced. That is the whole reason the agent can state facts without making reco
 
 ### Persistence
 
-In-memory, with an atomic JSON snapshot on disk (`SERVARE_SNAPSHOT`, default
-`.servare-state.json`) rewritten on mutation and reloaded on startup — so `--reload` firing
+In-memory, with an atomic JSON snapshot on disk (`ONCALL_SNAPSHOT`, default
+`.oncall-state.json`) rewritten on mutation and reloaded on startup — so `--reload` firing
 mid-demo doesn't wipe the ledger.
 
 ### Speaker attribution

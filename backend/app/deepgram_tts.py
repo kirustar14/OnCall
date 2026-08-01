@@ -6,7 +6,7 @@ import httpx
 
 from app.config import DEEPGRAM_API_KEY
 
-logger = logging.getLogger("servare.deepgram_tts")
+logger = logging.getLogger("oncall.deepgram_tts")
 
 # `speed` is a real Deepgram /v1/speak param — a speaking-rate multiplier that
 # preserves natural prosody (unlike a naive frontend playbackRate hack, which

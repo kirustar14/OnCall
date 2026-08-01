@@ -12,6 +12,8 @@
 // critical item that arrives mid-speech naturally lands at the front for the *next*
 // play — without ever cutting off audio that's already playing.
 
+import { getSavedOutput, routeToOutput } from './audioDevices';
+
 const URGENCY_RANK = { critical: 0, advisory: 1, informational: 2 };
 
 let queue = [];
@@ -124,10 +126,18 @@ function playNext() {
   };
   audio.onended = finish;
   audio.onerror = finish;
-  audio.play().catch((err) => {
-    console.warn('alert audio playback blocked', err);
-    finish();
-  });
+
+  // Send the agent's voice to the chosen output — the glasses, when they are
+  // paired — while the scenario clip keeps playing to the room. Best effort: if
+  // routing fails we still speak, just through the default device.
+  routeToOutput(audio, getSavedOutput())
+    .catch(() => false)
+    .then(() =>
+      audio.play().catch((err) => {
+        console.warn('alert audio playback blocked', err);
+        finish();
+      }),
+    );
 }
 
 /**

@@ -24,7 +24,7 @@ ROLES = [(0, "MEDIC"), (1, "DR. REYES"), (2, "NURSE OKAFOR")]
 
 async def run(port: int) -> None:
     base = f"http://localhost:{port}"
-    with wave.open("/tmp/servare-audio/demo-script.wav", "rb") as w:
+    with wave.open("/tmp/oncall-audio/demo-script.wav", "rb") as w:
         pcm = w.readframes(w.getnframes())
 
     alerts: list[str] = []

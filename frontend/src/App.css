@@ -1427,3 +1427,77 @@ body {
   line-height: 1.5;
   color: #cfe0ff;
 }
+
+/* ---------- audio devices (glasses) ---------- */
+
+.audio-devices {
+  margin-top: 16px;
+  background: #14161b;
+  border: 1px solid #262a33;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.audio-devices-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.audio-devices-head h4 {
+  margin: 0;
+  flex: 1;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8a919e;
+}
+
+.glasses-badge {
+  font-size: 9.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #0f3d33;
+  color: #35d0a5;
+  border: 1px solid #1c4a3e;
+  white-space: nowrap;
+}
+
+.device-row {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.device-label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #5b616c;
+  margin-bottom: 4px;
+}
+
+.device-select {
+  width: 100%;
+  background: #1b1e25;
+  border: 1px solid #262a33;
+  color: #e8eaed;
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.device-select:disabled {
+  opacity: 0.5;
+}
+
+.device-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #5b616c;
+}

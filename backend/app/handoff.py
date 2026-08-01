@@ -18,7 +18,7 @@ import anthropic
 from app.case_store import CaseState
 from app.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 
-logger = logging.getLogger("servare.handoff")
+logger = logging.getLogger("oncall.handoff")
 
 _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 

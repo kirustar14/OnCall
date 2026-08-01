@@ -7,8 +7,8 @@ set -u
 PORT="${1:-8210}"
 cd "$(dirname "$0")/.."
 
-rm -f .servare-state.json
-./venv/bin/uvicorn app.main:app --port "$PORT" --log-level warning > "/tmp/servare-$PORT.log" 2>&1 &
+rm -f .oncall-state.json
+./venv/bin/uvicorn app.main:app --port "$PORT" --log-level warning > "/tmp/oncall-$PORT.log" 2>&1 &
 SRV=$!
 
 cleanup() { kill "$SRV" 2>/dev/null; }
@@ -17,7 +17,7 @@ trap cleanup EXIT
 echo "server pid $SRV on :$PORT — waiting for schema warmup"
 sleep 26
 
-if grep -q "address already in use" "/tmp/servare-$PORT.log"; then
+if grep -q "address already in use" "/tmp/oncall-$PORT.log"; then
   echo "PORT $PORT ALREADY IN USE — aborting"
   exit 1
 fi
@@ -26,6 +26,6 @@ fi
 STATUS=$?
 
 echo ""
-echo "deepgram idle-timeouts: $(grep -c 'did not receive audio' "/tmp/servare-$PORT.log")"
-echo "server tracebacks:      $(grep -c 'Traceback' "/tmp/servare-$PORT.log")"
+echo "deepgram idle-timeouts: $(grep -c 'did not receive audio' "/tmp/oncall-$PORT.log")"
+echo "server tracebacks:      $(grep -c 'Traceback' "/tmp/oncall-$PORT.log")"
 exit $STATUS

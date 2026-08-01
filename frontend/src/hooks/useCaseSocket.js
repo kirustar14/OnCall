@@ -3,6 +3,7 @@ import { startAudioCapture, stopAudioCapture } from '../lib/audioCapture';
 import { startFilePlayback } from '../lib/filePlayback';
 import { createFrameGrabber } from '../lib/frameCapture';
 import { enqueueAlert } from '../lib/audioQueue';
+import { getSavedInput, saveInput, saveOutput } from '../lib/audioDevices';
 
 const WS_BASE = import.meta.env.VITE_WS_BASE || `ws://${window.location.hostname}:8000`;
 const API_BASE = import.meta.env.VITE_API_BASE || `http://${window.location.hostname}:8000`;
@@ -163,7 +164,14 @@ export function useCaseSocket(caseId, onAgentStep) {
 
     async function connect() {
       try {
-        const media = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        // Honour a previously chosen microphone — the glasses, when paired.
+        // `ideal` rather than `exact` so a device that has since disconnected
+        // falls back to the default instead of failing the whole case open.
+        const savedInput = getSavedInput();
+        const media = await navigator.mediaDevices.getUserMedia({
+          audio: savedInput ? { deviceId: { ideal: savedInput } } : true,
+          video: true,
+        });
         if (cancelled) {
           media.getTracks().forEach((t) => t.stop());
           return;
@@ -322,6 +330,49 @@ export function useCaseSocket(caseId, onAgentStep) {
     }
   }, [caseId, looking]);
 
+  /**
+   * Switch which microphone feeds the room audio — the glasses, once paired.
+   *
+   * Swaps the audio track in place rather than reopening the case: the
+   * WebSocket, the Deepgram session and the ledger all stay exactly where they
+   * are, so changing device mid-case costs nothing.
+   */
+  const setAudioInput = useCallback(async (deviceId) => {
+    saveInput(deviceId);
+
+    const ws = wsRef.current;
+    const media = mediaStreamRef.current;
+    if (!ws || !media) return;
+
+    try {
+      const next = await navigator.mediaDevices.getUserMedia({
+        audio: deviceId ? { deviceId: { ideal: deviceId } } : true,
+      });
+
+      stopAudioCapture(audioCaptureRef.current);
+      audioCaptureRef.current = null;
+      media.getAudioTracks().forEach((t) => {
+        media.removeTrack(t);
+        t.stop();
+      });
+      next.getAudioTracks().forEach((t) => media.addTrack(t));
+
+      // Only reopen the mic if it was open — in clip mode it stays shut.
+      if (inputModeRef.current === 'mic') {
+        audioCaptureRef.current = await startAudioCapture(media, (buf) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(buf);
+        });
+      }
+    } catch (err) {
+      console.error('failed to switch microphone', err);
+    }
+  }, []);
+
+  const setAudioOutput = useCallback((deviceId) => {
+    // Applied per utterance in the audio queue — nothing to restart.
+    saveOutput(deviceId);
+  }, []);
+
   const stopPlayback = useCallback(() => {
     playbackRef.current?.stop();
     playbackRef.current = null;
@@ -395,6 +446,8 @@ export function useCaseSocket(caseId, onAgentStep) {
     lastLook,
     looking,
     look,
+    setAudioInput,
+    setAudioOutput,
     endCase,
     assignSpeakerRole,
     requestHandoff,

@@ -25,7 +25,7 @@ from app.case_store import Alert, CaseState, next_alert_seq
 from app.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 from app.rxnav import drug_classes, epc_classes
 
-logger = logging.getLogger("servare.intervention")
+logger = logging.getLogger("oncall.intervention")
 
 _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 

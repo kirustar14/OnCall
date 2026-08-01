@@ -18,5 +18,5 @@ frontend/.env
 .gstack/
 
 # Runtime state snapshot
-.servare-state.json
+.oncall-state.json
 *.tmp

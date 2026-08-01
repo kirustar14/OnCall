@@ -9,13 +9,13 @@ import httpx
 from app.case_store import WORK_STATUS_TO_FHIR
 from app.config import MEDPLUM_BASE_URL, MEDPLUM_CLIENT_ID, MEDPLUM_CLIENT_SECRET
 
-logger = logging.getLogger("servare.medplum")
+logger = logging.getLogger("oncall.medplum")
 
-SOURCE_EXTENSION_URL = "https://servare.app/fhir/StructureDefinition/source"
-SPOKEN_AT_EXTENSION_URL = "https://servare.app/fhir/StructureDefinition/spoken-at"
-QUOTE_EXTENSION_URL = "https://servare.app/fhir/StructureDefinition/source-quote"
-PRACTITIONER_SYSTEM = "https://servare.app/role"
-DEVICE_SYSTEM = "https://servare.app/device"
+SOURCE_EXTENSION_URL = "https://oncall.app/fhir/StructureDefinition/source"
+SPOKEN_AT_EXTENSION_URL = "https://oncall.app/fhir/StructureDefinition/spoken-at"
+QUOTE_EXTENSION_URL = "https://oncall.app/fhir/StructureDefinition/source-quote"
+PRACTITIONER_SYSTEM = "https://oncall.app/role"
+DEVICE_SYSTEM = "https://oncall.app/device"
 
 # "in five minutes" -> 300. Deliberately crude: the spoken trigger is preserved
 # verbatim in Task.note, and restriction.period.end is only a machine hint.
@@ -100,14 +100,14 @@ class MedplumClient:
         resp.raise_for_status()
         return resp.json()
 
-    # --- Servare-specific resource builders -------------------------------------------------
+    # --- OnCall-specific resource builders -------------------------------------------------
 
     async def create_patient_and_encounter(self, case_id: str, case_label: str) -> tuple[str, str]:
         patient = await self.create_resource(
             "Patient",
             {
                 "resourceType": "Patient",
-                "identifier": [{"system": "https://servare.app/case-id", "value": case_id}],
+                "identifier": [{"system": "https://oncall.app/case-id", "value": case_id}],
                 "name": [{"text": case_label or f"Case {case_id[:8]}"}],
             },
         )
@@ -124,7 +124,7 @@ class MedplumClient:
                     "display": "emergency",
                 },
                 "subject": {"reference": f"Patient/{patient_id}"},
-                "identifier": [{"system": "https://servare.app/case-id", "value": case_id}],
+                "identifier": [{"system": "https://oncall.app/case-id", "value": case_id}],
             },
         )
         return patient_id, encounter["id"]
@@ -262,11 +262,11 @@ class MedplumClient:
         return created["id"]
 
     async def ensure_agent_device(self) -> Optional[str]:
-        """The Servare agent itself, as the Provenance recorder."""
+        """The OnCall agent itself, as the Provenance recorder."""
         if self._agent_device_id:
             return self._agent_device_id
         try:
-            found = await self.search("Device", {"identifier": f"{DEVICE_SYSTEM}|servare-agent"})
+            found = await self.search("Device", {"identifier": f"{DEVICE_SYSTEM}|oncall-agent"})
             for entry in found.get("entry", []):
                 existing_id = entry.get("resource", {}).get("id")
                 if existing_id:
@@ -277,8 +277,8 @@ class MedplumClient:
                 "Device",
                 {
                     "resourceType": "Device",
-                    "identifier": [{"system": DEVICE_SYSTEM, "value": "servare-agent"}],
-                    "deviceName": [{"name": "Servare voice agent", "type": "user-friendly-name"}],
+                    "identifier": [{"system": DEVICE_SYSTEM, "value": "oncall-agent"}],
+                    "deviceName": [{"name": "OnCall voice agent", "type": "user-friendly-name"}],
                     "status": "active",
                 },
             )
@@ -395,7 +395,7 @@ class MedplumClient:
                     }
                 ]
             },
-            "who": {"reference": f"Device/{device_id}", "display": "Servare voice agent"},
+            "who": {"reference": f"Device/{device_id}", "display": "OnCall voice agent"},
         }
         if source:
             # The human the assertion actually came from — "parent via nurse",

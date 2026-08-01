@@ -19,7 +19,7 @@ from app.extraction import extract_from_segment
 from app.handoff import build_handoff
 from app.intervention import _assess_conflict
 
-logger = logging.getLogger("servare.warmup")
+logger = logging.getLogger("oncall.warmup")
 
 
 async def warm_schemas() -> None:

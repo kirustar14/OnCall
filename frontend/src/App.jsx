@@ -59,7 +59,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Servare</h1>
+        <h1>OnCall</h1>
         <p className="tagline">Always-on voice agent for the ER</p>
       </header>
 

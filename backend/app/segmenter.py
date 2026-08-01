@@ -22,7 +22,7 @@ import logging
 import time
 from typing import Awaitable, Callable, Optional
 
-logger = logging.getLogger("servare.segmenter")
+logger = logging.getLogger("oncall.segmenter")
 
 # Fallback only. Deepgram's UtteranceEnd is the real cue (see flush_now); this
 # timer just guarantees an utterance eventually flushes if that event never

@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, Optional
 
-logger = logging.getLogger("servare.case_store")
+logger = logging.getLogger("oncall.case_store")
 
 # Work item lifecycle. Mirrors the FHIR Task state machine Medplum recommends
 # (see docs/careplans/tasks): "ready" is the actionable state for single-system
@@ -284,7 +284,7 @@ class CaseStore:
     def __init__(self, snapshot_path: Optional[str] = None) -> None:
         self._cases: dict[str, CaseState] = {}
         self._lock = threading.Lock()
-        self._snapshot_path = Path(snapshot_path or os.environ.get("SERVARE_SNAPSHOT", ".servare-state.json"))
+        self._snapshot_path = Path(snapshot_path or os.environ.get("ONCALL_SNAPSHOT", ".oncall-state.json"))
 
     def create(self, case_id: str) -> CaseState:
         with self._lock:

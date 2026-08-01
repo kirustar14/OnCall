@@ -11,7 +11,7 @@ import anthropic
 
 from app.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 
-logger = logging.getLogger("servare.intent")
+logger = logging.getLogger("oncall.intent")
 
 _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 

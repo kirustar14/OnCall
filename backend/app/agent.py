@@ -25,7 +25,7 @@ from app.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 from app.medplum_client import medplum_client
 from app.moss_client import moss_client
 
-logger = logging.getLogger("servare.agent")
+logger = logging.getLogger("oncall.agent")
 
 _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 

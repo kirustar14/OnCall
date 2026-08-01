@@ -29,13 +29,13 @@ CASE_ID = f"temporal-{uuid.uuid4().hex[:8]}"
 
 # (speaker, start_offset_seconds, what it contains) — from make_demo_audio.py
 TIMELINE = [
-    ("MEDIC", 0.0, "handoff: GCS, vitals, open tibia fracture"),
-    ("DR. REYES", 28.3, "three requests, one unowned"),
-    ("NURSE OKAFOR", 34.9, "claims ortho"),
-    ("NURSE OKAFOR", 38.6, "penicillin allergy from the mother"),
-    ("DR. REYES", 50.5, "orders ampicillin-sulbactam"),
+    ("MEDIC", 0.0, "handoff: GCS, vitals, open contaminated fracture"),
+    ("DR. LEE", 29.7, "three requests, one unowned"),
+    ("NURSE KATE", 36.3, "claims ortho"),
+    ("NURSE KATE", 39.6, "penicillin allergy from the mother"),
+    ("DR. LEE", 50.1, "orders Unasyn"),
 ]
-CLIP_SECONDS = 57.3
+CLIP_SECONDS = 55.8
 
 
 def _bar(seconds: float, scale: float = 1.4) -> str:
@@ -43,7 +43,7 @@ def _bar(seconds: float, scale: float = 1.4) -> str:
 
 
 async def run(port: int) -> None:
-    with wave.open("/tmp/servare-audio/demo-script.wav", "rb") as w:
+    with wave.open("/tmp/oncall-audio/demo-script.wav", "rb") as w:
         pcm = w.readframes(w.getnframes())
 
     events: list[tuple[float, str, str]] = []  # (audio_position, kind, detail)

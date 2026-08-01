@@ -23,7 +23,7 @@ from app.config import UNOWNED_PROMPT_DELAY_SECONDS
 from app.deepgram_tts import synthesize_speech
 from app.ws_manager import ws_manager
 
-logger = logging.getLogger("servare.watchdog")
+logger = logging.getLogger("oncall.watchdog")
 
 POLL_INTERVAL_SECONDS = 2.0
 # Minimum gap between spoken prompts for the same case. Three unowned items
