@@ -53,6 +53,7 @@ export default function CaseSession({ caseId, active, onAgentStep }) {
     playback,
     lastLook,
     looking,
+    lookError,
     look,
     setAudioInput,
     setAudioOutput,
@@ -171,6 +172,7 @@ export default function CaseSession({ caseId, active, onAgentStep }) {
           <PovLook
             lastLook={lastLook}
             looking={looking}
+            error={lookError}
             onLook={look}
             disabled={status === 'closed'}
           />

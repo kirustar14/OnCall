@@ -15,7 +15,7 @@ const LEGIBILITY_LABEL = {
   guessing: 'unclear',
 };
 
-export default function PovLook({ lastLook, looking, onLook, disabled }) {
+export default function PovLook({ lastLook, looking, onLook, disabled, error }) {
   const obs = lastLook?.observation;
   const readings = obs?.readings || [];
   const people = obs?.people || [];
@@ -30,6 +30,8 @@ export default function PovLook({ lastLook, looking, onLook, disabled }) {
       <button className="look-btn" onClick={onLook} disabled={disabled || looking}>
         {looking ? 'Looking…' : '◉ Look now'}
       </button>
+
+      {error && <p className="pov-error">{error}</p>}
 
       {obs && (
         <div className="pov-result">

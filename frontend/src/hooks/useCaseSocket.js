@@ -45,6 +45,7 @@ export function useCaseSocket(caseId, onAgentStep) {
   // can check the picture against what was said about it.
   const [lastLook, setLastLook] = useState(null);
   const [looking, setLooking] = useState(false);
+  const [lookError, setLookError] = useState('');
 
   const wsRef = useRef(null);
   const audioCaptureRef = useRef(null);
@@ -302,13 +303,24 @@ export function useCaseSocket(caseId, onAgentStep) {
    * the room to a model is both wasteful and a much harder thing to defend.
    */
   const look = useCallback(async () => {
+    if (looking) return;
+
+    // Every failure below used to return silently, which on stage looks
+    // identical to a button that does nothing. Say what went wrong instead.
     const grabber = grabberRef.current;
-    if (!grabber || looking) return;
+    if (!grabber) {
+      setLookError('No camera. Grant camera access and reopen the case.');
+      return;
+    }
 
     setLooking(true);
+    setLookError('');
     try {
       const frame = await grabber.capture();
-      if (!frame) return;
+      if (!frame) {
+        setLookError('Camera not ready yet — try again in a moment.');
+        return;
+      }
 
       const res = await fetch(`${API_BASE}/api/observe`, {
         method: 'POST',
@@ -319,12 +331,23 @@ export function useCaseSocket(caseId, onAgentStep) {
           media_type: 'image/jpeg',
         }),
       });
+      if (!res.ok) {
+        setLookError(`Backend returned ${res.status}.`);
+        return;
+      }
+
       const observation = await res.json();
+      if (observation.error) {
+        setLookError(observation.error);
+        return;
+      }
+
       // Keep the picture next to the claim so the reading can be checked
       // against what was actually on screen.
       setLastLook({ dataUrl: frame.dataUrl, observation, at: Date.now() });
     } catch (err) {
       console.error('look failed', err);
+      setLookError('Could not reach the backend.');
     } finally {
       setLooking(false);
     }
@@ -445,6 +468,7 @@ export function useCaseSocket(caseId, onAgentStep) {
     playback,
     lastLook,
     looking,
+    lookError,
     look,
     setAudioInput,
     setAudioOutput,
