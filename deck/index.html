@@ -1,899 +1,941 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Servare — the record the room can't keep</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OnCall — the record the room can't keep</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,200..700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
 <style>
-/* ---------------------------------------------------------------------
-   Tokens inherited from frontend/src/App.css so the deck reads as the
-   same object as the product.
-   ------------------------------------------------------------------- */
-:root {
-  --bg: #faf9f6;
-  --bg-card: #ffffff;
-  --bg-recessed: #f5f4ef;
-  --border: #e4e1d8;
-  --border-strong: #1a1a18;
-  --ink: #1a1a18;
-  --muted: #8c8878;
-  --label: #9b9686;
-  --live: #2f9e4f;
-  --advisory: #a9760f;
-  --critical: #b3261e;
-  --query: #4a5c8c;
+/* ══════════════════════════════════════════════════════════════════════
+   THE SYSTEM
 
-  --font-serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+     Canvas ...  dark stage — a resus bay at 2am, not a slide background
+     Type   ...  Newsreader (fallback Georgia, which is the product's own
+                 display face, so an offline fallback stays on-brand)
+                 + IBM Plex Mono for everything the machine produced.
+                 Four sizes, one mono label style.
+     Motif  ...  the vital trace. One continuous line, appearing as the
+                 title mark, the ambient field, and every timeline spine.
+     Colour ...  warm near-black dominates; ONE accent, the product's own
+                 critical red. Green appears only where the system is
+                 listening. Product tokens live in their own group and are
+                 lifted verbatim from frontend/src/App.css.
+     Motion ...  Material 3 easing. Movement only where it carries the
+                 argument: the race on slide 07, the block on slide 05.
+   ══════════════════════════════════════════════════════════════════════ */
+:root{
+  /* ── STAGE · the deck's own surface ── */
+  --bg:#100f0d; --ink:#f2efe6; --ink-2:rgba(242,239,230,.62); --ink-3:rgba(242,239,230,.38);
+  --hair:rgba(242,239,230,.10); --hair-2:rgba(242,239,230,.20);
 
-  --radius-card: 14px;
-  --radius-pill: 999px;
-  --shadow-card: 0 1px 2px rgba(20, 18, 12, 0.04);
-  --pad: clamp(24px, 3.6vw, 64px);
+  /* ── ACCENT · the product's critical red. The only saturated colour. ── */
+  --accent:#e05a4f; --accent-deep:#b3261e;
+  --live:#4cb96b;                 /* only ever means "listening" */
+
+  /* ── PRODUCT SURFACE · lifted verbatim from frontend/src/App.css ── */
+  --p-bg:#faf9f6; --p-card:#ffffff; --p-recessed:#f5f4ef;
+  --p-border:#e4e1d8; --p-border-strong:#1a1a18;
+  --p-text:#1a1a18; --p-muted:#8c8878; --p-label:#9b9686;
+  --p-alert:#b3261e; --p-radius:14px;
+
+  /* ── MOTION ── */
+  --e-emph:cubic-bezier(.2,0,0,1);
+  --e-emph-dec:cubic-bezier(.05,.7,.1,1);
+  --e-std-dec:cubic-bezier(0,0,0,1);
+  --e-std-acc:cubic-bezier(.3,0,1,1);
+  --spring-def:cubic-bezier(.38,1.21,.22,1.00);
+
+  --sans:"Newsreader",Georgia,"Iowan Old Style",Palatino,serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+
+  --sh-1:0 1px 2px rgba(0,0,0,.30);
+  --sh-2:0 6px 22px rgba(0,0,0,.34);
+  --sh-3:0 26px 70px rgba(0,0,0,.46);
 }
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#000;overflow:hidden;
+  font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141311; --bg-card: #1c1b18; --bg-recessed: #100f0d;
-    --border: #302e29; --border-strong: #f2efe6;
-    --ink: #f2efe6; --muted: #97917f; --label: #7d7869;
-    --live: #4cb96b; --advisory: #d19b34; --critical: #e05a4f; --query: #7d90c4;
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
-  }
-}
-:root[data-theme="light"] {
-  --bg: #faf9f6; --bg-card: #ffffff; --bg-recessed: #f5f4ef;
-  --border: #e4e1d8; --border-strong: #1a1a18;
-  --ink: #1a1a18; --muted: #8c8878; --label: #9b9686;
-  --live: #2f9e4f; --advisory: #a9760f; --critical: #b3261e; --query: #4a5c8c;
-  --shadow-card: 0 1px 2px rgba(20, 18, 12, 0.04);
-}
-:root[data-theme="dark"] {
-  --bg: #141311; --bg-card: #1c1b18; --bg-recessed: #100f0d;
-  --border: #302e29; --border-strong: #f2efe6;
-  --ink: #f2efe6; --muted: #97917f; --label: #7d7869;
-  --live: #4cb96b; --advisory: #d19b34; --critical: #e05a4f; --query: #7d90c4;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
-}
+#viewport{position:fixed;inset:0;background:#000;overflow:hidden}
+#deck{width:1920px;height:1080px;position:absolute;left:50%;top:50%;
+  transform-origin:center center;background:var(--bg);overflow:hidden}
 
-* { box-sizing: border-box; }
+/* ambient field — a warm bloom, and the motif drifting behind everything */
+#aura{position:absolute;inset:-20%;z-index:0;pointer-events:none}
+#aura b{position:absolute;display:block;border-radius:50%;filter:blur(170px);will-change:transform}
+#aura b:nth-child(1){width:1000px;height:1000px;left:-8%;top:-16%;background:#3a2a24;opacity:.55;animation:d1 38s ease-in-out infinite}
+#aura b:nth-child(2){width:820px;height:820px;right:-6%;bottom:-18%;background:#2a2a22;opacity:.5;animation:d2 45s ease-in-out infinite}
+@keyframes d1{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(80px,50px,0) scale(1.1)}}
+@keyframes d2{0%,100%{transform:translate3d(0,0,0) scale(1.04)}50%{transform:translate3d(-60px,-70px,0) scale(.95)}}
+#trace{position:absolute;left:0;right:0;top:52%;z-index:0;pointer-events:none;opacity:.09}
+#grain{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:.035;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
 
-html, body {
-  margin: 0; height: 100%; overflow: hidden;
-  background: var(--bg); color: var(--ink);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-}
-:focus-visible { outline: 2px solid var(--query); outline-offset: 3px; }
+/* ══ slides ══ */
+.s{position:absolute;inset:0;z-index:2;padding:76px 110px;display:flex;flex-direction:column;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity 200ms var(--e-std-acc),visibility 0s 200ms}
+.s.on{opacity:1;visibility:visible;pointer-events:auto;
+  transition:opacity 300ms 120ms var(--e-std-dec),visibility 0s}
+.s.center{justify-content:center;align-items:center;text-align:center}
+.s.mid{justify-content:flex-start}
 
-/* ---- stage ---------------------------------------------------------- */
+/* ══ type — four sizes + one mono label ══ */
+.t-mega{font-size:158px;line-height:.92;letter-spacing:-.045em;font-weight:300;margin:0}
+.t-big{font-size:104px;line-height:1.04;letter-spacing:-.036em;font-weight:300;margin:0}
+.t-mid{font-size:64px;line-height:1.1;letter-spacing:-.028em;font-weight:350;margin:0}
+.t-sm{font-size:34px;line-height:1.4;letter-spacing:-.012em;font-weight:400;margin:0;color:var(--ink-2)}
+.lbl{font-family:var(--mono);font-size:17px;letter-spacing:.26em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:500;margin:0}
+strong{font-weight:600}
+em{font-style:italic;color:var(--ink)}
+.hot{color:var(--accent)}
 
-.stage { position: relative; height: 100%; width: 100%; }
-.slide {
-  position: absolute; inset: 0;
-  padding: var(--pad); padding-left: calc(var(--pad) + 26px);
-  display: none; flex-direction: column; justify-content: center;
-  overflow-y: auto; overflow-x: hidden;
-}
-.slide.is-active { display: flex; animation: rise 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
-@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-.inner { width: 100%; max-width: 1240px; margin: 0 auto; }
+.shead{margin-bottom:30px;flex-shrink:0}
+.shead .lbl{margin-bottom:14px}
+.shead h2{font-size:56px;line-height:1.06;letter-spacing:-.032em;font-weight:300;margin:0;max-width:30ch}
+.shead .ctx{font-size:24px;line-height:1.45;color:var(--ink-3);margin:12px 0 0;max-width:52ch}
+.canvas{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;position:relative}
+.canvas svg{width:100%;height:100%;overflow:visible}
 
-/* ---- type ----------------------------------------------------------- */
+/* ══ builds ══ */
+[data-b]{opacity:0;transform:translateY(26px);
+  transition:opacity 400ms var(--e-std-dec),transform 500ms var(--e-emph-dec)}
+[data-b].in{opacity:1;transform:none}
+[data-b][data-fx="fade"]{transform:none}
+[data-b][data-fx="scale"]{transform:scale(.92);
+  transition:opacity 300ms var(--e-std-dec),transform 500ms var(--spring-def)}
+[data-b][data-fx="scale"].in{transform:scale(1)}
 
-.eyebrow {
-  font-family: var(--font-mono); font-size: 10.5px;
-  letter-spacing: 0.17em; text-transform: uppercase;
-  color: var(--label); margin: 0 0 14px;
-}
-h1, h2 { font-family: var(--font-serif); font-weight: 400; text-wrap: balance; margin: 0; letter-spacing: -0.012em; }
-h1 { font-size: clamp(46px, 7.2vw, 100px); line-height: 1.02; }
-h2 { font-size: clamp(26px, 3.3vw, 46px); line-height: 1.12; }
-.cap {
-  font-size: clamp(13px, 1.05vw, 15.5px); line-height: 1.55;
-  color: var(--muted); max-width: 74ch; margin: 16px 0 0; text-wrap: pretty;
-}
-.cap strong { color: var(--ink); font-weight: 600; }
-.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.rule { height: 1px; background: var(--border); border: 0; margin: 0; }
+/* ══ diagram grammar — shared by every artifact ══ */
+.box{fill:rgba(242,239,230,.035);stroke:var(--hair-2);stroke-width:1.5}
+.box-strong{fill:rgba(242,239,230,.06);stroke:var(--ink);stroke-width:2}
+.box-hot{fill:rgba(224,90,79,.09);stroke:var(--accent);stroke-width:2}
+.box-ghost{fill:none;stroke:var(--hair-2);stroke-width:1.5;stroke-dasharray:7 7}
+.edge{stroke:var(--ink-2);stroke-width:2;fill:none}
+.edge-soft{stroke:var(--ink-3);stroke-width:1.6;fill:none}
+.edge-hot{stroke:var(--accent);stroke-width:2.6;fill:none}
+.dash{stroke-dasharray:6 7}
+.flow{stroke-dasharray:7 10;animation:flow 1.25s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-34}}
 
-/* ---- diagrams ------------------------------------------------------- */
+.dH{font-family:var(--sans);font-size:30px;font-weight:350;fill:var(--ink)}
+.dHs{font-family:var(--sans);font-size:25px;font-weight:350;fill:var(--ink)}
+.dM{font-family:var(--mono);font-size:19px;fill:var(--ink-2)}
+.dMi{font-family:var(--mono);font-size:20px;fill:var(--ink)}
+.dMh{font-family:var(--mono);font-size:20px;fill:var(--accent)}
+.dL{font-family:var(--mono);font-size:16px;letter-spacing:.2em;fill:var(--ink-3)}
+.dBig{font-family:var(--sans);font-size:42px;font-weight:300;fill:var(--ink)}
+.d-hot{fill:var(--accent)}
+.d-ink{fill:var(--ink)}
+.d-live{fill:var(--live)}
+.d-soft{fill:var(--ink-3)}
+.breathe{animation:breathe 2.4s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.28}}
 
-.dg { display: block; width: 100%; height: auto; margin: 18px 0 0; overflow: visible; }
+/* ══ recreated product UI — the app's own tokens, on the dark stage ══ */
+.app{background:var(--p-bg);border-radius:20px;box-shadow:var(--sh-3);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  color:var(--p-text);padding:26px 30px;width:100%}
+.app-bar{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.app-bar .q{font-family:var(--mono);font-size:19px;color:#4a5c8c;
+  background:var(--p-recessed);border:1px solid var(--p-border);border-radius:10px;padding:9px 14px}
+.app-bar .n{font-family:var(--mono);font-size:16px;color:var(--p-label);letter-spacing:.14em;margin-left:auto}
+.trow{display:flex;align-items:center;gap:16px;background:var(--p-card);
+  border:1px solid var(--p-border);border-radius:var(--p-radius);padding:16px 20px;margin-bottom:10px;
+  box-shadow:var(--sh-1)}
+.trow.no-owner{border-color:var(--p-alert);border-width:2px;background:#fff}
+.trow .task{font-size:23px}
+.trow .own{margin-left:auto;font-family:var(--mono);font-size:17px;color:var(--p-muted)}
+.trow.no-owner .own{color:var(--p-alert);font-weight:600;letter-spacing:.1em}
+.trow .st{font-family:var(--mono);font-size:15px;color:var(--p-label);
+  border:1px solid var(--p-border);border-radius:999px;padding:4px 11px;letter-spacing:.08em}
+.trow.no-owner .st{color:var(--p-alert);border-color:var(--p-alert)}
 
-.box { fill: var(--bg-card); stroke: var(--border); stroke-width: 1; }
-.box-strong { fill: var(--bg-card); stroke: var(--border-strong); stroke-width: 1.4; }
-.box-recessed { fill: var(--bg-recessed); stroke: var(--border); stroke-width: 1; }
-.box-crit { fill: var(--bg-card); stroke: var(--critical); stroke-width: 1.4; }
-.box-ghost { fill: none; stroke: var(--border); stroke-width: 1; stroke-dasharray: 5 5; }
+/* ══ demo slide ══ */
+.demo{display:grid;grid-template-columns:1fr 640px;gap:44px;width:100%;height:100%;align-items:center}
+.screen{aspect-ratio:16/10;background:rgba(242,239,230,.04);border:1.5px solid var(--hair-2);
+  border-radius:18px;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:var(--sh-2)}
+.screen video{width:100%;height:100%;object-fit:contain;background:#000;display:block}
+.slot{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;padding:30px}
+.slot .fn{font-family:var(--mono);font-size:20px;color:var(--ink);
+  border:1.5px dashed var(--hair-2);border-radius:10px;padding:10px 16px}
+.slot .hint{font-family:var(--mono);font-size:15px;color:var(--ink-3);max-width:34ch;line-height:1.55}
+.said{font-size:30px;line-height:1.42;font-style:italic;margin:26px 0 0;color:var(--ink)}
 
-.edge { stroke: var(--border-strong); stroke-width: 1.3; fill: none; }
-.edge-soft { stroke: var(--muted); stroke-width: 1.1; fill: none; }
-.edge-crit { stroke: var(--critical); stroke-width: 1.6; fill: none; }
-.edge-dash { stroke-dasharray: 4 5; }
-.flow { stroke-dasharray: 5 7; animation: flow 1.3s linear infinite; }
-@keyframes flow { to { stroke-dashoffset: -24; } }
+/* ══ chrome ══ */
+#chrome{position:absolute;left:0;right:0;bottom:0;z-index:40;pointer-events:none;
+  padding:0 110px 40px;display:flex;align-items:flex-end;gap:24px}
+#dots{display:flex;gap:7px;pointer-events:auto}
+#dots i{width:7px;height:7px;border-radius:50%;background:rgba(242,239,230,.16);display:block;
+  cursor:pointer;transition:all 280ms var(--e-emph)}
+#dots i.on{background:var(--accent);width:26px;border-radius:4px}
+#dots i.seen{background:rgba(242,239,230,.34)}
+#meta{margin-left:auto;font-family:var(--mono);font-size:14px;letter-spacing:.2em;
+  color:var(--ink-3);text-transform:uppercase}
+#bar{position:absolute;left:0;top:0;height:2px;z-index:41;background:var(--accent);
+  transition:width 420ms var(--e-emph)}
+#hint{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:60;
+  font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(255,255,255,.30);transition:opacity 500ms;pointer-events:none}
+#hint.gone{opacity:0}
 
-.tH { font-family: var(--font-serif); font-size: 17px; fill: var(--ink); }
-.tHs { font-family: var(--font-serif); font-size: 14.5px; fill: var(--ink); }
-.tM { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
-.tMi { font-family: var(--font-mono); font-size: 11.5px; fill: var(--ink); }
-.tMq { font-family: var(--font-mono); font-size: 11px; fill: var(--query); }
-.tMc { font-family: var(--font-mono); font-size: 11px; fill: var(--critical); }
-.tL { font-family: var(--font-mono); font-size: 9.5px; fill: var(--label); letter-spacing: 0.13em; }
-.tBig { font-family: var(--font-serif); font-size: 21px; fill: var(--ink); }
-.fade { fill: var(--muted); opacity: 0.55; }
+#notes{position:fixed;left:0;right:0;bottom:0;z-index:90;background:rgba(12,11,9,.97);
+  backdrop-filter:blur(20px);border-top:1px solid var(--hair-2);padding:26px 44px 30px;
+  transform:translateY(100%);transition:transform 380ms var(--e-emph);max-height:46vh;overflow-y:auto}
+#notes.on{transform:none}
+#notes h4{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 12px;font-weight:500}
+#notes p{margin:0 0 12px;font-size:16px;line-height:1.62;color:var(--ink-2);max-width:110ch;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+#notes strong{color:var(--ink)}
+#notes .beat{color:var(--accent);font-weight:600}
 
-.dot-live { fill: var(--live); }
-.dot-crit { fill: var(--critical); }
-.dot-ink  { fill: var(--ink); }
-.dot-soft { fill: var(--border); }
-
-.pulse-node { animation: nodepulse 2.4s ease-in-out infinite; }
-@keyframes nodepulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-
-/* clickable svg nodes */
-.hit { cursor: pointer; }
-.hit rect { transition: fill 0.16s, stroke 0.16s; }
-.hit:hover rect.box { fill: var(--bg-recessed); }
-.hit[aria-selected="true"] rect.box { fill: var(--bg-recessed); stroke: var(--border-strong); stroke-width: 1.4; }
-
-/* ---- rail + chrome -------------------------------------------------- */
-
-.rail {
-  position: fixed; left: 0; top: 0; bottom: 0; width: 26px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px;
-  background: var(--bg); border-right: 1px solid var(--border); z-index: 40;
-}
-.rail button {
-  width: 5px; height: 5px; padding: 0; border: 0; border-radius: var(--radius-pill);
-  background: var(--border); cursor: pointer; transition: background 0.2s, height 0.2s;
-}
-.rail button:hover { background: var(--muted); }
-.rail button[aria-current="true"] { background: var(--ink); height: 20px; }
-
-.chrome {
-  position: fixed; right: var(--pad); bottom: 18px;
-  display: flex; align-items: center; gap: 12px;
-  font-family: var(--font-mono); font-size: 10.5px;
-  color: var(--label); letter-spacing: 0.06em; z-index: 40;
-}
-.chrome button {
-  font: inherit; letter-spacing: inherit; color: var(--muted);
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--radius-pill); padding: 5px 11px; cursor: pointer;
-}
-.chrome button:hover { border-color: var(--muted); color: var(--ink); }
-.counter { font-variant-numeric: tabular-nums; }
-
-/* ---- title ---------------------------------------------------------- */
-
-.title-wrap { display: flex; flex-direction: column; gap: 20px; }
-.wordmark { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
-.gloss { font-family: var(--font-serif); font-style: italic; font-size: clamp(14px, 1.2vw, 18px); color: var(--muted); }
-.lede { font-family: var(--font-serif); font-size: clamp(18px, 1.6vw, 23px); line-height: 1.45; max-width: 60ch; }
-.title-foot {
-  display: flex; gap: 8px 20px; flex-wrap: wrap;
-  font-family: var(--font-mono); font-size: 10.5px;
-  letter-spacing: 0.09em; color: var(--label); text-transform: uppercase;
-}
-.listening { display: inline-flex; align-items: center; gap: 8px; color: var(--live); }
-.pulse { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: nodepulse 2.2s ease-in-out infinite; }
-
-/* ---- pipeline detail ------------------------------------------------ */
-
-.detail {
-  margin-top: 12px; background: var(--bg-recessed);
-  border: 1px solid var(--border); border-radius: var(--radius-card);
-  padding: 16px 20px; min-height: 78px;
-}
-.detail p { margin: 0; font-size: 14.5px; line-height: 1.55; max-width: 96ch; color: var(--ink); }
-.detail .mono { color: var(--query); }
-
-/* ---- demo timeline -------------------------------------------------- */
-
-.tl { display: grid; grid-template-columns: 1fr 400px; gap: 22px; align-items: start; margin-top: 10px; }
-@media (max-width: 1080px) { .tl { grid-template-columns: 1fr; } }
-
-.viewer { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg-card); overflow: hidden; }
-.screen {
-  aspect-ratio: 16 / 10; background: var(--bg-recessed);
-  display: flex; align-items: center; justify-content: center;
-  border-bottom: 1px solid var(--border);
-}
-.screen video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
-.slot { display: flex; flex-direction: column; align-items: center; gap: 9px; color: var(--label); text-align: center; padding: 20px; }
-.slot .filename {
-  font-family: var(--font-mono); font-size: 11.5px; color: var(--ink);
-  background: var(--bg); border: 1px dashed var(--border);
-  border-radius: 8px; padding: 6px 11px;
-}
-.slot .hint { font-size: 11.5px; max-width: 34ch; line-height: 1.5; }
-.viewer-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 9px; min-height: 130px; }
-.viewer-body .said { font-family: var(--font-serif); font-style: italic; font-size: 15.5px; line-height: 1.45; margin: 0; }
-.viewer-body .note { font-size: 12.5px; line-height: 1.5; color: var(--muted); margin: 0; }
-.tag {
-  display: inline-flex; align-items: center; font-family: var(--font-mono);
-  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
-  padding: 3px 9px; border-radius: var(--radius-pill);
-  border: 1px solid currentColor; align-self: flex-start; color: var(--critical);
-}
-
-/* ---- close ---------------------------------------------------------- */
-
-.close-lines { display: flex; flex-direction: column; gap: 2px; }
-.close-lines span { font-family: var(--font-serif); font-size: clamp(30px, 4.4vw, 58px); line-height: 1.14; }
-.close-lines span:nth-child(n+2) { color: var(--muted); }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important}
 }
 </style>
 </head>
 <body>
+<div id="viewport"><div id="deck">
+  <div id="aura"><b></b><b></b></div>
+  <svg id="trace" viewBox="0 0 1920 200" preserveAspectRatio="none" height="200" aria-hidden="true">
+    <path id="tracePath" fill="none" stroke="var(--accent)" stroke-width="2"
+          d="M0 100 H420 l18 -8 l16 46 l20 -96 l22 118 l18 -60 H900 l20 -14 l14 40 l18 -86 l20 108 l16 -48 H1400 l18 -8 l16 46 l20 -96 l22 118 l18 -60 H1920"/>
+  </svg>
+  <div id="grain"></div>
+  <div id="bar"></div>
 
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-    <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--border-strong)" />
-  </marker>
-  <marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-    <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--muted)" />
-  </marker>
-  <marker id="ahc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-    <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--critical)" />
-  </marker>
-</defs></svg>
-
-<nav class="rail" id="rail" aria-label="Slides"></nav>
-
-<div class="stage" id="stage">
-
-  <!-- 1 · title ------------------------------------------------------->
-  <section class="slide" data-title="Servare">
-    <div class="inner title-wrap">
-      <p class="eyebrow"><span class="listening"><span class="pulse"></span>Listening</span></p>
-      <div class="wordmark">
-        <h1>Servare</h1>
-        <span class="gloss">serv&#257;re &mdash; to keep, to preserve, to watch over</span>
-      </div>
-      <p class="lede">Listens to the room, keeps the record nobody has time to write,
-        and speaks up only when the room contradicts itself.</p>
-
-      <svg class="dg" viewBox="0 0 1200 132" role="img"
-           aria-label="Speech enters as a waveform, becomes structured records, and returns as one spoken line">
-        <g id="wave"></g>
-        <path class="edge flow" d="M 250 66 H 430" marker-end="url(#ah)" />
-        <rect class="box" x="440" y="24" width="150" height="34" rx="8" />
-        <text class="tMq" x="456" y="46">Observation</text>
-        <rect class="box" x="440" y="74" width="150" height="34" rx="8" />
-        <text class="tMq" x="456" y="96">Task</text>
-        <rect class="box" x="606" y="49" width="164" height="34" rx="8" />
-        <text class="tMq" x="622" y="71">Provenance</text>
-        <path class="edge-soft" d="M 590 41 L 640 49" /><path class="edge-soft" d="M 590 91 L 640 83" />
-        <path class="edge flow" d="M 786 66 H 900" marker-end="url(#ah)" />
-        <rect class="box-crit" x="910" y="44" width="278" height="44" rx="10" />
-        <circle class="dot-crit pulse-node" cx="932" cy="66" r="4" />
-        <text class="tMc" x="948" y="70">one spoken line, back into the room</text>
+  <!-- ══════════ 01 · title ══════════ -->
+  <section class="s center">
+    <div data-b data-fx="fade" style="margin-bottom:44px">
+      <svg width="300" height="76" viewBox="0 0 300 76" aria-hidden="true">
+        <path d="M0 38 H88 l14 -7 l12 36 l16 -74 l17 90 l14 -45 H300" fill="none"
+              stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"
+              stroke-dasharray="440" stroke-dashoffset="440">
+          <animate attributeName="stroke-dashoffset" from="440" to="0" dur="2.2s"
+                   begin="0.4s" fill="freeze" calcMode="spline" keySplines=".2 0 0 1"/>
+        </path>
       </svg>
-
-      <hr class="rule" />
-      <div class="title-foot">
-        <span>YC &times; Medplum Agentic Healthcare Hackathon</span>
-        <span>Deepgram</span><span>Medplum</span><span>Claude Opus 5</span><span>NIH RxNav</span>
-      </div>
     </div>
+    <h1 class="t-mega" data-b>OnCall</h1>
+    <p class="t-sm" data-b style="margin-top:38px;max-width:24ch">
+      Listens to the room. Keeps the record. Speaks once.</p>
+    <p class="lbl" data-b data-fx="fade" style="margin-top:64px">
+      Deepgram &nbsp;·&nbsp; Medplum &nbsp;·&nbsp; moss.dev &nbsp;·&nbsp; Claude Opus 5 &nbsp;·&nbsp; NIH RxNav</p>
   </section>
 
-  <!-- 2 · problem ----------------------------------------------------->
-  <section class="slide" data-title="The problem">
-    <div class="inner">
-      <p class="eyebrow">The problem</p>
+  <!-- ══════════ 02 · the problem — timeline artifact ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">A trauma bay, 57 seconds</p>
       <h2>Everything is said. Nothing is written.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 640" role="img"
+           aria-label="Five spoken moments on a time axis above an empty record">
+        <text class="dL" x="0" y="26">WHAT THE ROOM SAID</text>
+        <path class="edge-soft" d="M 0 230 H 1690" data-b data-fx="fade"/>
 
-      <svg class="dg" viewBox="0 0 1200 330" role="img"
-           aria-label="A time axis of five spoken moments above an empty record">
-        <text class="tL" x="0" y="16">WHAT THE ROOM SAID</text>
+        <g data-b>
+          <line class="edge-soft" x1="70" y1="230" x2="70" y2="176"/>
+          <circle class="d-ink" cx="70" cy="230" r="7"/>
+          <text class="dMi" x="0" y="160">GCS 13 · HR 122 · open tibia</text>
+          <text class="dL" x="0" y="128">0:00 HANDOFF</text>
+        </g>
+        <g data-b>
+          <line class="edge-soft" x1="840" y1="230" x2="840" y2="286"/>
+          <circle class="d-ink" cx="840" cy="230" r="7"/>
+          <text class="dMi" x="840" y="314" text-anchor="middle">3 requests · 1 with nobody named</text>
+          <text class="dL" x="840" y="344" text-anchor="middle">0:28</text>
+        </g>
+        <g data-b>
+          <line class="edge-soft" x1="1018" y1="230" x2="1018" y2="186"/>
+          <circle class="d-ink" cx="1018" cy="230" r="7"/>
+          <text class="dM" x="1018" y="168" text-anchor="middle">“I’ve got ortho”</text>
+        </g>
+        <g data-b>
+          <line class="edge-hot" x1="1116" y1="230" x2="1116" y2="392"/>
+          <circle class="d-hot" cx="1116" cy="230" r="9"/>
+          <text class="dMh" x="1116" y="422" text-anchor="middle">severe penicillin allergy</text>
+          <text class="dL" x="1116" y="452" text-anchor="middle">0:38 · FROM THE MOTHER</text>
+        </g>
+        <g data-b>
+          <line class="edge-hot" x1="1434" y1="230" x2="1434" y2="176"/>
+          <circle class="d-hot" cx="1434" cy="230" r="9"/>
+          <text class="dMh" x="1434" y="160" text-anchor="middle">order: ampicillin-sulbactam</text>
+          <text class="dL" x="1434" y="128" text-anchor="middle">0:50</text>
+        </g>
 
-        <!-- axis -->
-        <path class="edge-soft" d="M 0 150 H 1190" marker-end="url(#ahs)" />
+        <g data-b data-fx="fade">
+          <path class="edge-hot dash" d="M 1116 262 V 282 H 1434 V 262"/>
+          <rect x="1204" y="258" width="142" height="34" rx="17" fill="var(--bg)"/>
+          <text class="dMh" x="1275" y="284" text-anchor="middle">12 seconds</text>
+        </g>
 
-        <!-- 0:00 handoff (above) -->
-        <line class="edge-soft" x1="60" y1="150" x2="60" y2="112" />
-        <circle class="dot-ink" cx="60" cy="150" r="4.5" />
-        <text class="tMi" x="60" y="102" text-anchor="middle">GCS 13 &middot; HR 122 &middot; open tibia</text>
-        <text class="tL" x="60" y="86" text-anchor="middle">0:00 EMS HANDOFF</text>
-
-        <!-- 0:28 requests (below) -->
-        <line class="edge-soft" x1="594" y1="150" x2="594" y2="190" />
-        <circle class="dot-ink" cx="594" cy="150" r="4.5" />
-        <text class="tMi" x="594" y="206" text-anchor="middle">3 requests &middot; 1 with nobody named</text>
-        <text class="tL" x="594" y="222" text-anchor="middle">0:28</text>
-
-        <!-- 0:35 claims (above) -->
-        <line class="edge-soft" x1="718" y1="150" x2="718" y2="118" />
-        <circle class="dot-ink" cx="718" cy="150" r="4.5" />
-        <text class="tM" x="718" y="108" text-anchor="middle">&ldquo;I&rsquo;ve got ortho&rdquo;</text>
-
-        <!-- 0:38 allergy (below, critical) -->
-        <line class="edge-crit" x1="787" y1="150" x2="787" y2="252" />
-        <circle class="dot-crit" cx="787" cy="150" r="5.5" />
-        <text class="tMc" x="787" y="268" text-anchor="middle">severe penicillin allergy</text>
-        <text class="tL" x="787" y="284" text-anchor="middle">0:38 &middot; FROM THE MOTHER</text>
-
-        <!-- 0:50 order (above, critical) -->
-        <line class="edge-crit" x1="1011" y1="150" x2="1011" y2="112" />
-        <circle class="dot-crit" cx="1011" cy="150" r="5.5" />
-        <text class="tMc" x="1011" y="102" text-anchor="middle">order: ampicillin-sulbactam</text>
-        <text class="tL" x="1011" y="86" text-anchor="middle">0:50</text>
-
-        <!-- the 12 second bracket -->
-        <path class="edge-crit edge-dash" d="M 787 172 V 182 H 1011 V 172" />
-        <rect x="855" y="170" width="88" height="22" rx="11" fill="var(--bg)" />
-        <text class="tMc" x="899" y="186" text-anchor="middle">12 seconds</text>
-
-        <!-- the record -->
-        <text class="tL" x="0" y="310">WHAT THE RECORD HELD</text>
-        <rect class="box-ghost" x="180" y="292" width="1010" height="34" rx="8" />
-        <text class="tM" x="685" y="314" text-anchor="middle">empty</text>
+        <g data-b data-fx="fade">
+          <text class="dL" x="0" y="558">WHAT THE RECORD HELD</text>
+          <rect class="box-ghost" x="330" y="530" width="1360" height="60" rx="14"/>
+          <text class="dM" x="1010" y="568" text-anchor="middle">empty</text>
+        </g>
       </svg>
-
-      <p class="cap">Both facts were in the room. Twelve seconds apart. Neither was anywhere a
-        person could check, and the patient is confused and cannot give a history.
-        <strong>The failure is not skill. Spoken information has no memory.</strong></p>
     </div>
   </section>
 
-  <!-- 3 · three pillars ------------------------------------------------>
-  <section class="slide" data-title="Details, tasks, context">
-    <div class="inner">
-      <p class="eyebrow">What it does</p>
+  <!-- ══════════ 03 · statement ══════════ -->
+  <section class="s center">
+    <h2 class="t-big" data-b style="max-width:19ch">Spoken information<br>has no memory.</h2>
+  </section>
+
+  <!-- ══════════ 04 · three pillars ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">What it does</p>
       <h2>One stream in. Three things out.</h2>
-
-      <svg class="dg" viewBox="0 0 1200 340" role="img"
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 620" role="img"
            aria-label="Room audio fans out into details, tasks and context, each landing as FHIR resources">
-        <!-- source -->
-        <rect class="box-strong" x="0" y="132" width="184" height="76" rx="12" />
-        <g id="wave2"></g>
-        <text class="tHs" x="92" y="196" text-anchor="middle">the room</text>
+        <g data-b data-fx="fade">
+          <rect class="box-strong" x="0" y="248" width="250" height="118" rx="18"/>
+          <g id="wave2"></g>
+          <text class="dHs" x="125" y="344" text-anchor="middle">the room</text>
+        </g>
 
-        <!-- edges -->
-        <path class="edge flow" d="M 184 170 C 300 170, 300 58, 420 58" marker-end="url(#ah)" />
-        <path class="edge flow" d="M 184 170 H 420" marker-end="url(#ah)" />
-        <path class="edge flow" d="M 184 170 C 300 170, 300 282, 420 282" marker-end="url(#ah)" />
+        <path class="edge flow" d="M 250 307 C 400 307, 400 96, 552 96" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 250 307 H 552" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 250 307 C 400 307, 400 518, 552 518" marker-end="url(#ah)" data-b data-fx="fade"/>
 
-        <!-- details -->
-        <rect class="box" x="430" y="26" width="242" height="64" rx="12" />
-        <text class="tH" x="452" y="54">Details</text>
-        <text class="tM" x="452" y="74">every fact said out loud</text>
-        <path class="edge-soft" d="M 672 58 H 726" marker-end="url(#ahs)" />
-        <rect class="box-recessed" x="736" y="26" width="452" height="64" rx="12" />
-        <text class="tMq" x="756" y="50">Observation &middot; AllergyIntolerance</text>
-        <text class="tMq" x="756" y="70">MedicationRequest</text>
+        <g data-b>
+          <rect class="box" x="566" y="46" width="330" height="100" rx="16"/>
+          <text class="dH" x="596" y="92">Details</text>
+          <text class="dM" x="596" y="124">every fact said out loud</text>
+          <path class="edge-soft" d="M 896 96 H 976" marker-end="url(#ahs)"/>
+          <rect class="box" x="990" y="46" width="700" height="100" rx="16"/>
+          <text class="dMi" x="1020" y="88">Observation · AllergyIntolerance</text>
+          <text class="dMi" x="1020" y="120">MedicationRequest</text>
+        </g>
 
-        <!-- tasks -->
-        <rect class="box" x="430" y="138" width="242" height="64" rx="12" />
-        <text class="tH" x="452" y="166">Tasks</text>
-        <text class="tM" x="452" y="186">every request said out loud</text>
-        <path class="edge-soft" d="M 672 170 H 726" marker-end="url(#ahs)" />
-        <rect class="box-recessed" x="736" y="138" width="452" height="64" rx="12" />
-        <text class="tMq" x="756" y="162">Task &middot; Task.owner &middot; Provenance</text>
-        <text class="tM" x="756" y="182">nobody named &rarr; owner omitted, never guessed</text>
+        <g data-b>
+          <rect class="box" x="566" y="257" width="330" height="100" rx="16"/>
+          <text class="dH" x="596" y="303">Tasks</text>
+          <text class="dM" x="596" y="335">every request said out loud</text>
+          <path class="edge-soft" d="M 896 307 H 976" marker-end="url(#ahs)"/>
+          <rect class="box" x="990" y="257" width="700" height="100" rx="16"/>
+          <text class="dMi" x="1020" y="299">Task · Task.owner · Provenance</text>
+          <text class="dM" x="1020" y="331">nobody named → owner omitted, never guessed</text>
+        </g>
 
-        <!-- context -->
-        <rect class="box" x="430" y="250" width="242" height="64" rx="12" />
-        <text class="tH" x="452" y="278">Context</text>
-        <text class="tM" x="452" y="298">for whoever walks in cold</text>
-        <path class="edge-soft" d="M 672 282 H 726" marker-end="url(#ahs)" />
-        <rect class="box-recessed" x="736" y="250" width="452" height="64" rx="12" />
-        <text class="tMq" x="756" y="274">spoken handoff &middot; ~20 seconds</text>
-        <text class="tM" x="756" y="294">five panels, not a transcript</text>
+        <g data-b>
+          <rect class="box" x="566" y="468" width="330" height="100" rx="16"/>
+          <text class="dH" x="596" y="514">Context</text>
+          <text class="dM" x="596" y="546">for whoever walks in cold</text>
+          <path class="edge-soft" d="M 896 518 H 976" marker-end="url(#ahs)"/>
+          <rect class="box" x="990" y="468" width="700" height="100" rx="16"/>
+          <text class="dMi" x="1020" y="510">spoken handoff · ~20 seconds</text>
+          <text class="dM" x="1020" y="542">five panels, not a transcript</text>
+        </g>
       </svg>
-
-      <p class="cap">Voice in, voice out. <strong>Nobody stops to type, and there is no screen
-        anyone has to look at.</strong></p>
     </div>
   </section>
 
-  <!-- 4 · the boundary ------------------------------------------------->
-  <section class="slide" data-title="The boundary">
-    <div class="inner">
-      <p class="eyebrow">The line it does not cross</p>
+  <!-- ══════════ 05 · the boundary ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">The line it does not cross</p>
       <h2>It states. It never prescribes.</h2>
-
-      <svg class="dg" viewBox="0 0 1200 300" role="img"
-           aria-label="A fact passes through the boundary as a statement, while a therapy recommendation is stopped by it">
-        <rect class="box-strong" x="0" y="112" width="212" height="76" rx="12" />
-        <text class="tHs" x="24" y="146">a fact the room</text>
-        <text class="tHs" x="24" y="168">already established</text>
-
-        <!-- the wall -->
-        <line x1="560" y1="10" x2="560" y2="290" stroke="var(--border-strong)" stroke-width="2.5" />
-        <text class="tL" x="574" y="24">THE BOUNDARY</text>
-
-        <!-- allowed: passes through -->
-        <path class="edge flow" d="M 212 150 C 330 150, 330 74, 700 74" marker-end="url(#ah)" />
-        <circle class="dot-live" cx="560" cy="74" r="6" />
-        <rect class="box" x="710" y="40" width="478" height="70" rx="12" />
-        <text class="tMi" x="732" y="66">&ldquo;Ampicillin-sulbactam is a penicillin-class antibacterial.</text>
-        <text class="tMi" x="732" y="86">Allergy documented 14:32, severe, relayed by the nurse.&rdquo;</text>
-        <text class="tL" x="710" y="128">STATES THE FACT &middot; NAMES THE SOURCE &middot; STOPS</text>
-
-        <!-- blocked: stopped at the wall -->
-        <path class="edge-crit edge-dash" d="M 212 150 C 330 150, 330 226, 540 226" />
-        <g transform="translate(560, 226)">
-          <circle r="13" fill="var(--bg)" stroke="var(--critical)" stroke-width="1.6" />
-          <path d="M -5 -5 L 5 5 M 5 -5 L -5 5" stroke="var(--critical)" stroke-width="1.8" />
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 580" role="img"
+           aria-label="A fact passes the boundary as a statement; a therapy recommendation is blocked by it">
+        <g data-b data-fx="fade">
+          <rect class="box-strong" x="0" y="212" width="290" height="118" rx="18"/>
+          <text class="dHs" x="32" y="262">a fact the room</text>
+          <text class="dHs" x="32" y="298">already established</text>
         </g>
-        <rect class="box-ghost" x="710" y="196" width="478" height="60" rx="12" />
-        <text class="tM" x="732" y="222" class="fade">&ldquo;Give vancomycin instead.&rdquo;</text>
-        <text class="tM" x="732" y="242" class="fade">a dose &middot; an alternative &middot; a plan</text>
-        <text class="tL" x="710" y="274">NEVER CROSSES</text>
-      </svg>
 
-      <p class="cap">Software that recommends a therapy is a different regulatory and liability
-        object than software that surfaces information a clinician can independently review.
-        <strong>Every assertion carries a Provenance, and tests/test_ledger.py asserts the boundary
-        so it cannot quietly drift back.</strong></p>
+        <g data-b data-fx="fade">
+          <line x1="770" y1="10" x2="770" y2="560" stroke="var(--ink)" stroke-width="3"/>
+          <text class="dL" x="792" y="28">THE BOUNDARY</text>
+        </g>
+
+        <path class="edge flow" d="M 290 271 C 450 271, 450 122, 960 122" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <g data-b>
+          <circle class="d-live" cx="770" cy="122" r="10"/>
+          <rect class="box" x="980" y="62" width="710" height="122" rx="16"/>
+          <text class="dMi" x="1012" y="110">“Ampicillin-sulbactam is a</text>
+          <text class="dMi" x="1012" y="142">penicillin-class antibacterial.”</text>
+          <text class="dL" x="980" y="216">STATES IT · NAMES THE SOURCE · STOPS</text>
+        </g>
+
+        <path class="edge-hot dash" d="M 290 271 C 450 271, 450 428, 740 428" data-b data-fx="fade"/>
+        <!-- The translate lives on an INNER g: [data-b] animates `transform`, and a
+             CSS transform overrides the SVG presentation attribute, which would
+             otherwise fling this marker to the origin the moment it builds in. -->
+        <g data-b><g transform="translate(770,428)">
+          <circle r="26" fill="var(--bg)" stroke="var(--accent)" stroke-width="3"/>
+          <path d="M -10 -10 L 10 10 M 10 -10 L -10 10" stroke="var(--accent)" stroke-width="3.4"/>
+        </g></g>
+        <g data-b data-fx="fade">
+          <rect class="box-ghost" x="980" y="378" width="710" height="100" rx="16"/>
+          <text class="dM" x="1012" y="424">“Give vancomycin instead.”</text>
+          <text class="dM" x="1012" y="456">a dose · an alternative · a plan</text>
+          <text class="dL" x="980" y="514">NEVER CROSSES</text>
+        </g>
+      </svg>
     </div>
   </section>
 
-  <!-- 5 · the flow ----------------------------------------------------->
-  <section class="slide" data-title="The flow">
-    <div class="inner">
-      <p class="eyebrow">The flow &mdash; click any node</p>
+  <!-- ══════════ 06 · the loop ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">Architecture</p>
       <h2>One loop, room to room.</h2>
-
-      <svg class="dg" viewBox="0 0 1200 372" id="pipeSvg" role="tablist"
-           aria-label="Pipeline from the room through Deepgram, Claude and Medplum and back into the room">
-        <!-- main edges -->
-        <path class="edge flow" d="M 196 92 H 232" marker-end="url(#ah)" />
-        <path class="edge flow" d="M 428 92 H 464" marker-end="url(#ah)" />
-        <path class="edge flow" d="M 660 92 H 696" marker-end="url(#ah)" />
-        <path class="edge flow" d="M 892 92 H 928" marker-end="url(#ah)" />
-        <!-- return loop -->
-        <path class="edge flow" d="M 1064 132 V 300 H 98 V 132" marker-end="url(#ah)" />
-        <rect x="470" y="288" width="220" height="24" rx="12" fill="var(--bg)" />
-        <text class="tL" x="580" y="304" text-anchor="middle">SPOKEN BACK INTO THE ROOM</text>
-
-        <g id="pipeNodes"></g>
-
-        <!-- vision branch -->
-        <rect class="box-ghost" x="232" y="196" width="196" height="56" rx="12" />
-        <text class="tMi" x="252" y="220">POV camera frame</text>
-        <text class="tM" x="252" y="238">informs, never writes</text>
-        <path class="edge-soft edge-dash" d="M 330 196 V 132" marker-end="url(#ahs)" />
-
-        <!-- watchdog branch -->
-        <rect class="box-ghost" x="464" y="196" width="196" height="56" rx="12" />
-        <text class="tMi" x="484" y="220">watchdog &middot; timer</text>
-        <text class="tM" x="484" y="238">chases unowned work</text>
-        <path class="edge-soft edge-dash" d="M 562 196 V 132" marker-end="url(#ahs)" />
-
-        <!-- rxnav gate -->
-        <rect class="box-crit" x="928" y="196" width="196" height="56" rx="12" />
-        <text class="tMc" x="948" y="220">NIH RxNav gate</text>
-        <text class="tM" x="948" y="238">no class match, no alert</text>
-        <path class="edge-crit edge-dash" d="M 1026 196 V 132" marker-end="url(#ahc)" />
-      </svg>
-
-      <div class="detail" id="pipeDetail" aria-live="polite"></div>
     </div>
-  </section>
-
-  <!-- 6 · conflict ----------------------------------------------------->
-  <section class="slide" data-title="Why it can interrupt">
-    <div class="inner">
-      <p class="eyebrow">Why it is allowed to interrupt</p>
-      <h2>The word &ldquo;penicillin&rdquo; never appears.</h2>
-
-      <svg class="dg" viewBox="0 0 1200 336" role="img"
-           aria-label="String matching misses the conflict; FDA class resolution finds it">
-        <!-- track A -->
-        <text class="tL" x="0" y="30">STRING MATCHING</text>
-        <rect class="box" x="0" y="44" width="212" height="46" rx="10" />
-        <text class="tMi" x="20" y="72">ampicillin-sulbactam</text>
-        <path class="edge-soft" d="M 212 67 H 268" marker-end="url(#ahs)" />
-        <rect class="box" x="278" y="44" width="256" height="46" rx="10" />
-        <text class="tM" x="298" y="72">.includes(&ldquo;penicillin&rdquo;)</text>
-        <path class="edge-soft" d="M 534 67 H 590" marker-end="url(#ahs)" />
-        <rect class="box" x="600" y="44" width="104" height="46" rx="10" />
-        <text class="tM" x="620" y="72">false</text>
-        <path class="edge-soft edge-dash" d="M 704 67 H 812" />
-        <g transform="translate(834, 67)">
-          <circle r="13" fill="var(--bg)" stroke="var(--muted)" stroke-width="1.4" />
-          <path d="M -5 -5 L 5 5 M 5 -5 L -5 5" stroke="var(--muted)" stroke-width="1.6" />
+    <div class="canvas">
+      <svg viewBox="0 0 1700 640" role="img"
+           aria-label="A closed loop around the room: Deepgram in, Claude, Medplum, the RxNav gate, Deepgram out">
+        <g data-b data-fx="scale">
+          <rect class="box-strong" x="640" y="268" width="420" height="112" rx="56"/>
+          <circle class="d-live breathe" cx="702" cy="324" r="9"/>
+          <text class="dBig" x="740" y="338">the room</text>
         </g>
-        <text class="tM" x="866" y="72">no alert &middot; silent miss</text>
 
-        <line class="edge-soft edge-dash" x1="0" y1="128" x2="1190" y2="128" />
+        <g data-b>
+          <rect class="box" x="70" y="40" width="470" height="126" rx="16"/>
+          <text class="dH" x="102" y="88">Deepgram</text>
+          <text class="dM" x="102" y="122">nova-3-medical · diarize · keyterms</text>
+          <text class="dM" x="102" y="148">UtteranceEnd endpointing</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="1160" y="40" width="470" height="126" rx="16"/>
+          <text class="dH" x="1192" y="88">Claude Opus 5</text>
+          <text class="dM" x="1192" y="122">stateful structured extraction</text>
+          <text class="dM" x="1192" y="148">“I’ve got it” resolves the open task</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="1160" y="474" width="470" height="126" rx="16"/>
+          <text class="dH" x="1192" y="522">Medplum</text>
+          <text class="dM" x="1192" y="556">Task · Provenance · Observation</text>
+          <text class="dM" x="1192" y="582">AllergyIntolerance · MedicationRequest</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="70" y="474" width="470" height="126" rx="16"/>
+          <text class="dH" x="102" y="522">Deepgram Aura-2</text>
+          <text class="dM" x="102" y="556">queued by urgency, not arrival</text>
+          <text class="dM" x="102" y="582">critical jumps the advisory</text>
+        </g>
+        <g data-b data-fx="scale">
+          <rect class="box-hot" x="670" y="508" width="360" height="68" rx="16"/>
+          <text class="dMh" x="702" y="550">NIH RxNav · the gate</text>
+        </g>
 
-        <!-- track B -->
-        <text class="tL" x="0" y="166">TIER 1 &middot; FDA ESTABLISHED PHARMACOLOGIC CLASS</text>
-        <rect class="box" x="0" y="180" width="212" height="46" rx="10" />
-        <text class="tMi" x="20" y="208">ampicillin-sulbactam</text>
-        <path class="edge-crit flow" d="M 212 203 H 268" marker-end="url(#ahc)" />
-        <rect class="box" x="278" y="180" width="196" height="46" rx="10" />
-        <text class="tMq" x="298" y="208">RxCUI 1009148</text>
-        <path class="edge-crit flow" d="M 474 203 H 530" marker-end="url(#ahc)" />
-        <rect class="box" x="540" y="180" width="300" height="46" rx="10" />
-        <text class="tMq" x="560" y="208">EPC: Penicillin-class Antibacterial</text>
-        <path class="edge-crit flow" d="M 840 203 H 896" marker-end="url(#ahc)" />
-        <rect class="box-crit" x="906" y="180" width="282" height="46" rx="10" />
-        <circle class="dot-crit pulse-node" cx="928" cy="203" r="4.5" />
-        <text class="tMc" x="944" y="208">matches documented allergy</text>
-
-        <!-- outcome -->
-        <path class="edge-crit" d="M 1047 226 V 262" marker-end="url(#ahc)" />
-        <rect class="box-crit" x="906" y="272" width="282" height="44" rx="10" />
-        <text class="tMc" x="928" y="299">SPEAKS. ONCE.</text>
-
-        <!-- negative control -->
-        <rect class="box-ghost" x="0" y="268" width="560" height="52" rx="10" />
-        <text class="tL" x="20" y="290">NEGATIVE CONTROL</text>
-        <text class="tM" x="20" y="308">clindamycin &rarr; Lincosamide &rarr; no match &rarr; correctly silent</text>
+        <g data-b data-fx="fade">
+          <path class="edge flow" d="M 668 268 C 580 210, 540 130, 528 106" marker-end="url(#ah)"/>
+          <path class="edge flow" d="M 540 103 H 1148" marker-end="url(#ah)"/>
+          <path class="edge flow" d="M 1395 166 V 462" marker-end="url(#ah)"/>
+          <path class="edge-hot flow" d="M 1160 542 H 1042" marker-end="url(#ahc)"/>
+          <path class="edge-hot flow" d="M 670 542 H 552" marker-end="url(#ahc)"/>
+          <path class="edge flow" d="M 305 474 C 305 400, 480 356, 628 336" marker-end="url(#ah)"/>
+          <text class="dL" x="560" y="88">SPEECH</text>
+          <text class="dL" x="1414" y="330">STRUCTURE</text>
+          <text class="dL" x="1064" y="518">VERIFY</text>
+          <text class="dL" x="330" y="408">SPEAK</text>
+        </g>
       </svg>
-
-      <p class="cap"><strong>Tier 1 cannot invent a conflict, because it is not the thing deciding
-        one exists.</strong> Tier 2 is an open-ended agent for what no rule could enumerate: read-only,
-        never writes to the ledger, and can never promote itself to critical.</p>
     </div>
   </section>
 
-  <!-- 7 · fhir --------------------------------------------------------->
-  <section class="slide" data-title="The ledger is FHIR">
-    <div class="inner">
-      <p class="eyebrow">Grounded in Medplum</p>
+  <!-- ══════════ 07 · the race ══════════ -->
+  <section class="s mid" id="raceSlide">
+    <div class="shead">
+      <p class="lbl">Why it is allowed to interrupt</p>
+      <h2>The word “penicillin” never appears in the order.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 600" role="img"
+           aria-label="String matching misses the conflict; FDA class resolution finds it">
+        <text class="dL" x="0" y="28">STRING MATCHING</text>
+        <g class="rA" data-r="0">
+          <rect class="box" x="0" y="52" width="330" height="76" rx="14"/>
+          <text class="dMi" x="30" y="99">ampicillin-sulbactam</text>
+        </g>
+        <path class="edge-soft rA" data-r="1" d="M 330 90 H 400" marker-end="url(#ahs)"/>
+        <g class="rA" data-r="2">
+          <rect class="box" x="414" y="52" width="410" height="76" rx="14"/>
+          <text class="dM" x="444" y="99">.includes(“penicillin”)</text>
+        </g>
+        <path class="edge-soft rA" data-r="3" d="M 824 90 H 894" marker-end="url(#ahs)"/>
+        <g class="rA" data-r="4">
+          <rect class="box" x="908" y="52" width="150" height="76" rx="14"/>
+          <text class="dM" x="938" y="99">false</text>
+        </g>
+        <g class="rA" data-r="5">
+          <path class="edge-soft dash" d="M 1058 90 H 1214"/>
+          <g transform="translate(1252,90)">
+            <circle r="24" fill="var(--bg)" stroke="var(--ink-3)" stroke-width="2.4"/>
+            <path d="M -9 -9 L 9 9 M 9 -9 L -9 9" stroke="var(--ink-3)" stroke-width="2.6"/>
+          </g>
+          <text class="dM" x="1300" y="99">no alert · silent miss</text>
+        </g>
+
+        <line class="edge-soft dash" x1="0" y1="212" x2="1690" y2="212"/>
+
+        <text class="dL" x="0" y="272">TIER 1 · FDA ESTABLISHED PHARMACOLOGIC CLASS</text>
+        <g class="rB" data-r="0">
+          <rect class="box" x="0" y="296" width="330" height="76" rx="14"/>
+          <text class="dMi" x="30" y="343">ampicillin-sulbactam</text>
+        </g>
+        <path class="edge-hot rB" data-r="1" d="M 330 334 H 400" marker-end="url(#ahc)"/>
+        <g class="rB" data-r="2">
+          <rect class="box" x="414" y="296" width="300" height="76" rx="14"/>
+          <text class="dMi" x="444" y="343">RxCUI 1009148</text>
+        </g>
+        <path class="edge-hot rB" data-r="3" d="M 714 334 H 784" marker-end="url(#ahc)"/>
+        <g class="rB" data-r="4">
+          <rect class="box" x="798" y="296" width="512" height="76" rx="14"/>
+          <text class="dMi" x="828" y="343">EPC: Penicillin-class Antibacterial</text>
+        </g>
+        <path class="edge-hot rB" data-r="5" d="M 1310 334 H 1380" marker-end="url(#ahc)"/>
+        <g class="rB" data-r="6">
+          <rect class="box-hot" x="1394" y="296" width="296" height="76" rx="14"/>
+          <circle class="d-hot breathe" cx="1424" cy="334" r="8"/>
+          <text class="dMh" x="1448" y="343">allergy match</text>
+        </g>
+        <g class="rB" data-r="7">
+          <path class="edge-hot" d="M 1542 372 V 434" marker-end="url(#ahc)"/>
+          <rect class="box-hot" x="1394" y="448" width="296" height="76" rx="14"/>
+          <text class="dMh" x="1424" y="495">SPEAKS. ONCE.</text>
+        </g>
+
+        <g class="rB" data-r="7">
+          <rect class="box-ghost" x="0" y="448" width="880" height="76" rx="14"/>
+          <text class="dL" x="30" y="482">NEGATIVE CONTROL</text>
+          <text class="dM" x="30" y="512">clindamycin → Lincosamide → no match → correctly silent</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ══════════ 08 · two tiers ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">Two tiers</p>
+      <h2>Only one of them is allowed to raise its voice.</h2>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 560" role="img"
+           aria-label="Tier one is deterministic and may speak; tier two is advisory, read-only, and cannot escalate">
+        <g data-b>
+          <rect class="box-hot" x="0" y="40" width="760" height="220" rx="20"/>
+          <text class="dL" x="40" y="90">TIER 1 · DETERMINISTIC</text>
+          <text class="dH" x="40" y="146">allergy × order × FDA class</text>
+          <text class="dM" x="40" y="188">fires only on a real class match</text>
+          <text class="dM" x="40" y="220">cannot invent a conflict — it is not</text>
+          <text class="dM" x="40" y="246">the thing deciding one exists</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="0" y="300" width="760" height="220" rx="20"/>
+          <text class="dL" x="40" y="350">TIER 2 · ADVISORY</text>
+          <text class="dH" x="40" y="406">open-ended agent</text>
+          <text class="dM" x="40" y="448">for what no rule could enumerate</text>
+          <text class="dM" x="40" y="480">read-only · never writes the ledger</text>
+          <text class="dM" x="40" y="506">can never promote itself to critical</text>
+        </g>
+
+        <path class="edge-hot flow" d="M 760 150 H 1090" marker-end="url(#ahc)" data-b data-fx="fade"/>
+        <path class="edge-soft dash" d="M 760 410 C 900 410, 900 220, 1040 200" data-b data-fx="fade"/>
+        <g data-b data-fx="fade"><g transform="translate(1076,192)">
+          <circle r="22" fill="var(--bg)" stroke="var(--ink-3)" stroke-width="2.2"/>
+          <path d="M -8 -8 L 8 8 M 8 -8 L -8 8" stroke="var(--ink-3)" stroke-width="2.4"/>
+        </g></g>
+
+        <g data-b data-fx="scale">
+          <rect class="box-strong" x="1120" y="182" width="570" height="196" rx="20"/>
+          <text class="dL" x="1156" y="234">THE ONLY THING THAT SPEAKS</text>
+          <text class="dBig" x="1156" y="298">Aura-2</text>
+          <text class="dM" x="1156" y="342">queued by urgency, not arrival</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ══════════ 09 · one sentence, four resources ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">Grounded in Medplum</p>
       <h2>One sentence becomes four resources.</h2>
-
-      <svg class="dg" viewBox="0 0 1200 330" role="img"
-           aria-label="A spoken sentence decomposes into FHIR resources with provenance, and unowned tasks are a native search">
-        <!-- utterance -->
-        <rect class="box-strong" x="0" y="120" width="326" height="68" rx="12" />
-        <text class="tHs" x="20" y="148">&ldquo;Mom just told me she has a</text>
-        <text class="tHs" x="20" y="170">severe penicillin allergy.&rdquo;</text>
-
-        <path class="edge flow" d="M 326 154 C 386 154, 386 46, 446 46" marker-end="url(#ah)" />
-        <path class="edge flow" d="M 326 154 C 386 154, 386 122, 446 122" marker-end="url(#ah)" />
-        <path class="edge flow" d="M 326 154 C 386 154, 386 198, 446 198" marker-end="url(#ah)" />
-        <path class="edge flow" d="M 326 154 C 386 154, 386 274, 446 274" marker-end="url(#ah)" />
-
-        <rect class="box" x="456" y="24" width="290" height="44" rx="10" />
-        <text class="tMq" x="476" y="44">AllergyIntolerance</text>
-        <text class="tM" x="476" y="60">code = penicillin (bare substance)</text>
-
-        <rect class="box" x="456" y="100" width="290" height="44" rx="10" />
-        <text class="tMq" x="476" y="120">.reaction / .criticality</text>
-        <text class="tM" x="476" y="136">anaphylaxis &middot; high</text>
-
-        <rect class="box" x="456" y="176" width="290" height="44" rx="10" />
-        <text class="tMq" x="476" y="196">Provenance.agent.who</text>
-        <text class="tM" x="476" y="212">the agent Device that asserted it</text>
-
-        <rect class="box-crit" x="456" y="252" width="290" height="44" rx="10" />
-        <text class="tMc" x="476" y="272">.agent.onBehalfOf</text>
-        <text class="tM" x="476" y="288">the mother &middot; relayed by the nurse</text>
-
-        <!-- the search -->
-        <line class="edge-soft edge-dash" x1="790" y1="10" x2="790" y2="320" />
-        <text class="tL" x="820" y="30">AND THE HARD PART IS A STANDARD SEARCH</text>
-        <rect class="box-recessed" x="820" y="44" width="368" height="40" rx="10" />
-        <text class="tMq" x="838" y="69">GET /Task?owner:missing=true</text>
-
-        <path class="edge-soft" d="M 1004 84 V 112" marker-end="url(#ahs)" />
-
-        <rect class="box" x="820" y="122" width="368" height="40" rx="10" />
-        <text class="tM" x="838" y="147">get ortho down here</text>
-        <text class="tMq" x="1074" y="147">owner: nurse</text>
-
-        <rect class="box" x="820" y="172" width="368" height="40" rx="10" />
-        <text class="tM" x="838" y="197">repeat pressure in 5 min</text>
-        <text class="tMq" x="1074" y="197">owner: nurse</text>
-
-        <rect class="box-crit" x="820" y="222" width="368" height="40" rx="10" />
-        <text class="tMc" x="838" y="247">anticoagulation status</text>
-        <text class="tMc" x="1086" y="247">NO OWNER</text>
-
-        <path class="edge-crit" d="M 1004 262 V 288" marker-end="url(#ahc)" />
-        <text class="tMc" x="1004" y="308" text-anchor="middle">the watchdog asks the room</text>
-      </svg>
-
-      <p class="cap"><strong>Task is not a stretch here, it is what the resource is for</strong> &mdash;
-        which means &ldquo;show me everything nobody has taken&rdquo; is a native FHIR query rather
-        than a flag we invented and would have to maintain.</p>
     </div>
-  </section>
+    <div class="canvas">
+      <svg viewBox="0 0 1700 580" role="img"
+           aria-label="A spoken sentence decomposes into FHIR resources, each carrying provenance">
+        <g data-b data-fx="fade">
+          <rect class="box-strong" x="0" y="212" width="560" height="140" rx="18"/>
+          <text class="dHs" x="34" y="270">“Mom just told me she has a</text>
+          <text class="dHs" x="34" y="310">severe penicillin allergy.”</text>
+        </g>
 
-  <!-- 8 · the stack ---------------------------------------------------->
-  <section class="slide" data-title="The stack">
-    <div class="inner">
-      <p class="eyebrow">The stack, as one closed loop</p>
-      <h2>Each one does something the loop could not close without.</h2>
+        <path class="edge flow" d="M 560 282 C 660 282, 660 78, 760 78" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 560 282 C 660 282, 660 214, 760 214" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge flow" d="M 560 282 C 660 282, 660 350, 760 350" marker-end="url(#ah)" data-b data-fx="fade"/>
+        <path class="edge-hot flow" d="M 560 282 C 660 282, 660 486, 760 486" marker-end="url(#ahc)" data-b data-fx="fade"/>
 
-      <svg class="dg" viewBox="0 0 1200 380" role="img"
-           aria-label="A closed loop around the room: Deepgram in, Claude, Medplum, RxNav gate, Deepgram out">
-        <!-- centre -->
-        <rect class="box-strong" x="466" y="152" width="268" height="76" rx="38" />
-        <circle class="dot-live pulse-node" cx="502" cy="190" r="5" />
-        <text class="tBig" x="524" y="197">the room</text>
-
-        <!-- corners -->
-        <rect class="box" x="60" y="26" width="300" height="76" rx="12" />
-        <text class="tH" x="82" y="56">Deepgram</text>
-        <text class="tM" x="82" y="76">nova-3-medical &middot; diarize &middot; keyterms</text>
-        <text class="tM" x="82" y="92">UtteranceEnd endpointing</text>
-
-        <rect class="box" x="840" y="26" width="300" height="76" rx="12" />
-        <text class="tH" x="862" y="56">Claude Opus 5</text>
-        <text class="tM" x="862" y="76">structured extraction, stateful:</text>
-        <text class="tM" x="862" y="92">&ldquo;I&rsquo;ve got it&rdquo; resolves the open task</text>
-
-        <rect class="box" x="840" y="278" width="300" height="76" rx="12" />
-        <text class="tH" x="862" y="308">Medplum</text>
-        <text class="tM" x="862" y="328">Task &middot; Provenance &middot; Observation</text>
-        <text class="tM" x="862" y="344">AllergyIntolerance &middot; MedicationRequest</text>
-
-        <rect class="box" x="60" y="278" width="300" height="76" rx="12" />
-        <text class="tH" x="82" y="308">Deepgram Aura-2</text>
-        <text class="tM" x="82" y="328">queued by urgency, not arrival</text>
-        <text class="tM" x="82" y="344">critical jumps the advisory</text>
-
-        <!-- gate on the return leg -->
-        <rect class="box-crit" x="466" y="298" width="268" height="44" rx="10" />
-        <text class="tMc" x="488" y="325">NIH RxNav &middot; the gate</text>
-
-        <!-- loop edges, clockwise -->
-        <path class="edge flow" d="M 490 152 C 420 110, 380 76, 372 64" marker-end="url(#ah)" />
-        <path class="edge flow" d="M 360 64 H 828" marker-end="url(#ah)" />
-        <path class="edge flow" d="M 990 102 V 266" marker-end="url(#ah)" />
-        <path class="edge-crit flow" d="M 840 316 H 746" marker-end="url(#ahc)" />
-        <path class="edge-crit flow" d="M 466 316 H 372" marker-end="url(#ahc)" />
-        <path class="edge flow" d="M 210 278 C 210 220, 340 200, 454 192" marker-end="url(#ah)" />
-
-        <text class="tL" x="380" y="52">SPEECH</text>
-        <text class="tL" x="1002" y="192">STRUCTURE</text>
-        <text class="tL" x="770" y="292">VERIFY</text>
-        <text class="tL" x="228" y="222">SPEAK</text>
+        <g data-b>
+          <rect class="box" x="774" y="34" width="916" height="88" rx="16"/>
+          <text class="dMi" x="806" y="72">AllergyIntolerance.code</text>
+          <text class="dM" x="806" y="102">penicillin — stored bare, so a class lookup can match it</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="774" y="170" width="916" height="88" rx="16"/>
+          <text class="dMi" x="806" y="208">.reaction / .criticality</text>
+          <text class="dM" x="806" y="238">anaphylaxis · high — kept out of the substance field</text>
+        </g>
+        <g data-b>
+          <rect class="box" x="774" y="306" width="916" height="88" rx="16"/>
+          <text class="dMi" x="806" y="344">Provenance.agent.who</text>
+          <text class="dM" x="806" y="374">the agent Device that asserted it</text>
+        </g>
+        <g data-b>
+          <rect class="box-hot" x="774" y="442" width="916" height="88" rx="16"/>
+          <text class="dMh" x="806" y="480">Provenance.agent.onBehalfOf</text>
+          <text class="dM" x="806" y="510">the mother is the source · the nurse is the relay</text>
+        </g>
       </svg>
     </div>
   </section>
 
-  <!-- 9 · demo --------------------------------------------------------->
-  <section class="slide" data-title="The demo">
-    <div class="inner">
-      <p class="eyebrow">The demo &mdash; fill the ledger, disturb it, drain it</p>
-      <h2>Fifty-seven seconds in a trauma bay.</h2>
-      <div class="tl">
-        <div>
-          <svg class="dg" viewBox="0 0 640 400" id="tlSvg" role="tablist" aria-label="Demo beats">
+  <!-- ══════════ 10 · unowned work — recreated product UI ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">The hard part</p>
+      <h2>Unowned work is a search, not a feature we invented.</h2>
+    </div>
+    <div class="canvas">
+      <div style="width:100%;max-width:1500px" data-b data-fx="scale">
+        <div class="app">
+          <div class="app-bar">
+            <span class="q">GET /Task?owner:missing=true&amp;status=ready</span>
+            <span class="n">MEDPLUM · FHIR R4</span>
+          </div>
+          <div class="trow">
+            <span class="task">Get ortho down here</span>
+            <span class="st">IN-PROGRESS</span>
+            <span class="own">owner · Nurse Okafor</span>
+          </div>
+          <div class="trow">
+            <span class="task">Repeat that pressure in five minutes</span>
+            <span class="st">READY</span>
+            <span class="own">owner · Nurse Okafor</span>
+          </div>
+          <div class="trow no-owner">
+            <span class="task">Determine anticoagulation status</span>
+            <span class="st">READY</span>
+            <span class="own">NO OWNER</span>
+          </div>
+          <!-- The exact question has an exact answer in FHIR. The fuzzy one
+               ("has anyone mentioned her mother?") does not, which is what the
+               semantic index is for. Medplum stays the source of truth. -->
+          <div class="app-bar" style="margin:22px 0 0">
+            <span class="q" style="color:#2f9e4f">moss.dev &nbsp;“anything about her mother?”</span>
+            <span class="n">SEMANTIC RECALL · ACROSS EVERY CASE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 11 · the demo ══════════ -->
+  <section class="s mid">
+    <div class="shead">
+      <p class="lbl">Live demo</p>
+      <h2>Fifty-seven seconds, and the ledger holds.</h2>
+    </div>
+    <div class="canvas">
+      <div class="demo">
+        <div data-b data-fx="fade">
+          <svg viewBox="0 0 900 460" style="width:100%;height:auto" id="tlSvg" role="tablist" aria-label="Demo beats">
             <g id="tlNodes"></g>
           </svg>
         </div>
-        <div class="viewer">
+        <div data-b data-fx="scale">
           <div class="screen" id="screen"></div>
-          <div class="viewer-body" id="viewerBody"></div>
+          <p class="said" id="said"></p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- 10 · close ------------------------------------------------------->
-  <section class="slide" data-title="Close">
-    <div class="inner">
-      <p class="eyebrow">Servare</p>
-      <div class="close-lines">
-        <span>It asks.</span><span>It never assigns.</span><span>And it never advises.</span>
-      </div>
-      <svg class="dg" viewBox="0 0 1200 92" style="max-width: 820px" aria-hidden="true">
-        <path class="edge flow" d="M 0 46 H 1150" marker-end="url(#ah)" />
-        <circle class="dot-live pulse-node" cx="0" cy="46" r="5" />
-      </svg>
-      <p class="cap" style="font-family: var(--font-serif); font-size: 19px; color: var(--ink);">
-        The room keeps talking. Something should be keeping the record.</p>
-    </div>
+  <!-- ══════════ 12 · close ══════════ -->
+  <section class="s center">
+    <h2 class="t-big" data-b style="max-width:18ch">It asks.<br>
+      <span style="color:var(--ink-2)">It never assigns.</span><br>
+      <span style="color:var(--ink-2)">And it never advises.</span></h2>
   </section>
 
-</div>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--ink-2)"/></marker>
+    <marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--ink-3)"/></marker>
+    <marker id="ahc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--accent)"/></marker>
+  </defs></svg>
 
-<div class="chrome">
-  <button type="button" id="themeBtn">Theme</button>
-  <button type="button" id="prevBtn" aria-label="Previous slide">&larr;</button>
-  <button type="button" id="nextBtn" aria-label="Next slide">&rarr;</button>
-  <span class="counter" id="counter">01 / 10</span>
-</div>
+  <div id="chrome"><div id="dots"></div><div id="meta"></div></div>
+</div></div>
+
+<div id="notes"><h4>Speaker notes</h4><div id="notesBody"></div></div>
+<div id="hint">← → &nbsp;·&nbsp; N notes &nbsp;·&nbsp; S speaker view &nbsp;·&nbsp; F fullscreen</div>
 
 <script>
-(function () {
-  "use strict";
-  var SVGNS = "http://www.w3.org/2000/svg";
+/* ══════════ SPEAKER NOTES ══════════ */
+const NOTES = [
+`<p><span class="beat">Open cold, before the title lands.</span> "A trauma bay produces more facts per minute than any one person can hold."</p>
+<p>Then: <strong>OnCall listens to the room and keeps the record nobody has time to write.</strong></p>
+<p>Don't list the sponsors. They're on the slide.</p>`,
 
-  function el(tag, attrs, text) {
-    var n = document.createElementNS(SVGNS, tag);
-    for (var k in attrs) { if (attrs.hasOwnProperty(k)) n.setAttribute(k, attrs[k]); }
-    if (text !== undefined) n.textContent = text;
-    return n;
-  }
+`<p>Walk the axis left to right. Handoff, requests, someone claims one.</p>
+<p><span class="beat">Slow down at the two red marks.</span> The mother relays a penicillin allergy at 38 seconds. The order goes in at 50.</p>
+<p><span class="beat">Point at the empty box.</span> <strong>Both facts were in the room. Neither was anywhere a person could check.</strong> And the patient is confused — she can't give a history, so the room is the only record that exists.</p>`,
 
-  /* ---- decorative waveforms ----------------------------------------- */
+`<p><span class="beat">Read it, then stop talking.</span></p>
+<p>If someone pushes on it: this isn't a competence problem. Nobody failed here.</p>`,
 
-  var WAVE = [8, 18, 11, 26, 15, 32, 20, 38, 24, 30, 16, 22, 12, 27, 9, 19, 13, 24, 10, 16];
+`<p>Three things, and deliberately nothing else.</p>
+<p><span class="beat">Point at the middle row.</span> When nobody is named, we leave the owner off rather than guessing it from whoever happened to be speaking. <strong>A wrong owner is worse than no owner — it stops anyone else from picking it up.</strong></p>
+<p>Voice in, voice out. Nobody stops to type.</p>`,
 
-  function drawWave(host, x0, cy, step, scale) {
-    WAVE.forEach(function (h, i) {
-      var hh = h * scale;
-      host.appendChild(el("line", {
-        x1: x0 + i * step, y1: cy - hh / 2, x2: x0 + i * step, y2: cy + hh / 2,
-        stroke: "var(--live)", "stroke-width": 2, "stroke-linecap": "round",
-        opacity: 0.35 + (h / 60)
-      }));
-    });
-  }
-  drawWave(document.getElementById("wave"), 12, 66, 11, 1);
-  drawWave(document.getElementById("wave2"), 26, 158, 7, 0.85);
+`<p>This is the slide that gets asked about, so land it deliberately.</p>
+<p><span class="beat">Trace the top path.</span> It states the fact and names the source. <span class="beat">Then the blocked one.</span> <strong>It never recommends a therapy.</strong></p>
+<p>Why: software that recommends therapy is a different regulatory and liability object than software that surfaces something a clinician can independently review. And the second is the honest description of what a language model is reliably good at.</p>
+<p>If pressed: tests/test_ledger.py asserts the boundary, so it can't quietly drift back.</p>`,
 
-  /* ---- slides -------------------------------------------------------- */
+`<p>One loop. Speech in at the top left, structure across the top, verify at the bottom, speak back into the room.</p>
+<p><span class="beat">Point at the gate.</span> Nothing reaches the speaker without passing RxNav first.</p>
+<p>Two things hang off this that aren't drawn: a point-of-view camera frame that informs context but never writes a clinical value, and a watchdog on a timer that chases unowned work when nobody is speaking.</p>`,
 
-  var slides = [].slice.call(document.querySelectorAll(".slide"));
-  var rail = document.getElementById("rail");
-  var counter = document.getElementById("counter");
-  var current = 0;
+`<p><span class="beat">Let the top track run and fail before you say anything.</span></p>
+<p>"Ampicillin-sulbactam" shares no substring with "penicillin". A keyword matcher finds nothing and stays silent.</p>
+<p><span class="beat">Then the bottom track.</span> RxNav resolves it to RxCUI 1009148, FDA class: Penicillin-class Antibacterial. <strong>That's a real match, so it speaks — once.</strong></p>
+<p>The negative control matters as much: clindamycin resolves to Lincosamide, no match, stays quiet. It isn't just alerting on everything.</p>`,
 
-  slides.forEach(function (s, i) {
-    var b = document.createElement("button");
-    b.type = "button";
-    b.setAttribute("aria-label", "Slide " + (i + 1) + ": " + s.dataset.title);
-    b.addEventListener("click", function () { go(i); });
-    rail.appendChild(b);
+`<p>Two tiers, and the asymmetry is the safety property.</p>
+<p><span class="beat">Point at the blocked arrow.</span> <strong>Tier 2 can notice things, but it can never make itself critical.</strong> The only thing that reaches the room at critical urgency came through a deterministic, externally verified check.</p>`,
+
+`<p>Every fact lands as real FHIR, not a JSON blob.</p>
+<p><span class="beat">Point at the bottom row.</span> The mother stays the source, the nurse stays the relay. <strong>That's what lets a clinician review the basis instead of trusting us.</strong></p>
+<p>Note the top row too: the substance is stored bare, with reaction and severity in separate fields. That's what makes the class lookup on the next slide possible at all.</p>`,
+
+`<p>This is the payoff for modelling it properly.</p>
+<p><span class="beat">Read the query out loud.</span> owner:missing=true is a standard FHIR search modifier. <strong>We didn't invent an "unowned" flag and we don't maintain one.</strong></p>
+<p>The watchdog runs that query on a timer and asks the room about whatever comes back.</p>`,
+
+`<p><span class="beat">Click the beats in order.</span> Fill the ledger, disturb it, drain it.</p>
+<p>Land on the conflict beat. Twelve seconds between the allergy and the order.</p>
+<p>Then the last beat: someone who wasn't in the room asks once and gets it back in about twenty seconds.</p>`,
+
+`<p><span class="beat">Read it, then stop.</span> Leave it up for questions.</p>
+<p>If you only get one line in: <strong>it asks, it never assigns, and it never advises.</strong></p>`
+];
+
+/* ══════════ nav ══════════ */
+const slides=[...document.querySelectorAll('.s')];
+const dots=document.getElementById('dots'),bar=document.getElementById('bar'),
+      meta=document.getElementById('meta'),notesEl=document.getElementById('notes'),
+      notesBody=document.getElementById('notesBody'),hint=document.getElementById('hint');
+let cur=-1;
+dots.innerHTML=slides.map((_,i)=>`<i data-i="${i}"></i>`).join('');
+const dotEls=[...dots.children];
+const buildsOf=i=>slides[i]?[...slides[i].querySelectorAll('[data-b]')]:[];
+
+function goto(i){
+  if(i<0||i>=slides.length||i===cur)return;
+  buildsOf(cur).forEach(e=>{e.classList.remove('in');e.style.transitionDelay=''});
+  cur=i;
+  slides.forEach((s,k)=>s.classList.toggle('on',k===cur));
+  dotEls.forEach((d,k)=>{d.classList.toggle('on',k===cur);d.classList.toggle('seen',k<cur)});
+  bar.style.width=((cur+1)/slides.length*100)+'%';
+  meta.textContent=String(cur+1).padStart(2,'0')+' / '+slides.length;
+  notesBody.innerHTML=NOTES[cur]||'';
+  buildsOf(cur).forEach((el,k)=>{
+    el.style.transitionDelay=(240+k*90)+'ms';
+    requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('in')));
   });
-  var dots = [].slice.call(rail.children);
+  try{chan&&chan.postMessage({i:cur})}catch(e){}
+  fire(cur);
+}
+addEventListener('keydown',e=>{
+  if(['ArrowRight',' ','PageDown','Enter'].includes(e.key)){e.preventDefault();goto(cur+1)}
+  else if(['ArrowLeft','PageUp','Backspace'].includes(e.key)){e.preventDefault();goto(cur-1)}
+  else if(e.key==='Home')goto(0);
+  else if(e.key==='End')goto(slides.length-1);
+  else if(e.key==='n'||e.key==='N')notesEl.classList.toggle('on');
+  else if(e.key==='s'||e.key==='S')openSpeaker();
+  else if(e.key==='f'||e.key==='F')document.documentElement.requestFullscreen?.();
+  hint.classList.add('gone');
+});
+dots.addEventListener('click',e=>{const d=e.target.closest('i');if(d)goto(+d.dataset.i)});
+document.getElementById('viewport').addEventListener('click',e=>{
+  if(e.target.closest('#dots,#notes,#hint,button,[data-beat]'))return;
+  const r=e.currentTarget.getBoundingClientRect();
+  goto((e.clientX-r.left)/r.width<0.28?cur-1:cur+1);
+  hint.classList.add('gone');
+});
+setTimeout(()=>hint.classList.add('gone'),7000);
 
-  function pad(n) { return (n < 10 ? "0" : "") + n; }
+function fit(){const s=Math.min(innerWidth/1920,innerHeight/1080);
+  document.getElementById('deck').style.transform=`translate(-50%,-50%) scale(${s})`}
+addEventListener('resize',fit);fit();
 
-  function go(i) {
-    current = Math.max(0, Math.min(slides.length - 1, i));
-    slides.forEach(function (s, n) { s.classList.toggle("is-active", n === current); });
-    dots.forEach(function (d, n) { d.setAttribute("aria-current", n === current ? "true" : "false"); });
-    counter.textContent = pad(current + 1) + " / " + pad(slides.length);
-  }
+/* ══════════ speaker window ══════════ */
+let chan=null; try{chan=new BroadcastChannel('deck')}catch(e){}
+function openSpeaker(){
+  const w=window.open('','speaker','width=860,height=720');
+  if(!w)return;
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>Speaker view</title><style>
+    body{margin:0;background:#0d0c0a;color:#f2efe6;padding:26px 30px;
+      font:16px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    h1{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:#8c8878;margin:0 0 6px}
+    #t{font-variant-numeric:tabular-nums;font-size:38px;font-weight:300;letter-spacing:-.03em;margin:0 0 4px}
+    #c{color:#8c8878;font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 24px}
+    #b p{margin:0 0 14px;color:#cbc7bb}#b strong{color:#fff}.beat{color:#e05a4f;font-weight:600}
+    hr{border:0;border-top:1px solid #2b2924;margin:22px 0}#n{color:#7d7869;font-size:14px}#n b{color:#a8a394}
+  </style><h1>Speaker view</h1><div id="t">00:00</div><div id="c">—</div><div id="b"></div><hr><div id="n"></div>`);
+  w.document.close();
+  const t0=Date.now();
+  setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000),el=w.document.getElementById('t');
+    if(el)el.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')},500);
+  const paint=i=>{
+    if(w.closed)return;
+    w.document.getElementById('c').textContent='Slide '+(i+1)+' of '+slides.length;
+    w.document.getElementById('b').innerHTML=NOTES[i]||'';
+    w.document.getElementById('n').innerHTML=NOTES[i+1]
+      ? '<b>Next →</b> '+NOTES[i+1].replace(/<[^>]+>/g,' ').trim().slice(0,150)+'…'
+      : '<b>End.</b> Leave the last slide up for Q&amp;A.';
+  };
+  paint(cur);
+  if(chan)chan.onmessage=e=>paint(e.data.i); else setInterval(()=>paint(cur),400);
+}
 
-  document.getElementById("prevBtn").addEventListener("click", function () { go(current - 1); });
-  document.getElementById("nextBtn").addEventListener("click", function () { go(current + 1); });
-
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); go(current + 1); }
-    else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); go(current - 1); }
-    else if (e.key === "Home") { e.preventDefault(); go(0); }
-    else if (e.key === "End") { e.preventDefault(); go(slides.length - 1); }
+/* ══════════ decorative waveform inside the "room" node ══════════ */
+(function(){
+  const SVGNS='http://www.w3.org/2000/svg', host=document.getElementById('wave2');
+  if(!host)return;
+  [8,18,11,26,15,32,20,38,24,30,16,22,12,27,9,19,13,24].forEach((h,i)=>{
+    const hh=h*1.5, l=document.createElementNS(SVGNS,'line');
+    l.setAttribute('x1',36+i*11); l.setAttribute('x2',36+i*11);
+    l.setAttribute('y1',290-hh/2); l.setAttribute('y2',290+hh/2);
+    l.setAttribute('stroke','var(--live)'); l.setAttribute('stroke-width',3);
+    l.setAttribute('stroke-linecap','round'); l.setAttribute('opacity',.3+h/60);
+    host.appendChild(l);
   });
-
-  document.getElementById("themeBtn").addEventListener("click", function () {
-    var root = document.documentElement;
-    var dark = root.getAttribute("data-theme")
-      ? root.getAttribute("data-theme") === "dark"
-      : window.matchMedia("(prefers-color-scheme: dark)").matches;
-    root.setAttribute("data-theme", dark ? "light" : "dark");
-  });
-
-  /* ---- pipeline nodes ------------------------------------------------ */
-
-  var STAGES = [
-    { x: 0,   name: "the room", sub: "point-of-view mic",
-      body: "Audio streams from wherever the clinician already is. On Ray-Ban Meta that is the open-ear mic with no display to look at; in the browser the proxy is the laptop. The capture module sits behind one small interface, so nothing downstream can tell which lens it came from." },
-    { x: 232, name: "Deepgram", sub: "nova-3-medical",
-      body: "Medical vocabulary, keyterm prompting for the drug names this case turns on, diarization to tell us <em>that</em> the speaker changed, and <span class='mono'>UtteranceEnd</span> for real endpointing. Acoustic segments are then merged into clinical utterances, because &ldquo;GCS thirteen&rdquo; split across two segments is not a vital sign anymore." },
-    { x: 464, name: "Claude Opus 5", sub: "structured extraction",
-      body: "Each utterance is extracted under a strict schema, and the extraction is <em>stateful</em>: the currently open tasks go in alongside it, so &ldquo;I&rsquo;ve got ortho&rdquo; resolves the existing task and assigns its owner instead of opening a duplicate. Schemas are pre-compiled at boot so the first real utterance does not pay for setup." },
-    { x: 696, name: "Medplum", sub: "the FHIR ledger",
-      body: "Facts become <span class='mono'>Observation</span>, <span class='mono'>AllergyIntolerance</span> and <span class='mono'>MedicationRequest</span>; requests become <span class='mono'>Task</span>. Every one carries a <span class='mono'>Provenance</span> naming the agent that asserted it and the human it came from." },
-    { x: 928, name: "Aura-2", sub: "spoken back",
-      body: "Output is spoken, never displayed, and queued by urgency rather than arrival, so a verified conflict jumps ahead of an advisory already waiting. While the agent speaks, room audio ducks rather than pauses, so the transcript stream never falls behind real time." }
-  ];
-
-  var pipeNodes = document.getElementById("pipeNodes");
-  var pipeDetail = document.getElementById("pipeDetail");
-  var pipeGroups = [];
-
-  STAGES.forEach(function (st, i) {
-    var g = el("g", { class: "hit", role: "tab", "aria-selected": i === 0 ? "true" : "false",
-                      tabindex: "0", "aria-label": st.name });
-    g.appendChild(el("rect", { class: "box", x: st.x, y: 52, width: 196, height: 80, rx: 12 }));
-    g.appendChild(el("text", { class: "tL", x: st.x + 20, y: 76 }, "0" + (i + 1)));
-    g.appendChild(el("text", { class: "tH", x: st.x + 20, y: 102 }, st.name));
-    g.appendChild(el("text", { class: "tM", x: st.x + 20, y: 120 }, st.sub));
-    g.addEventListener("click", function () { selectStage(i); });
-    g.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectStage(i); }
-    });
-    pipeNodes.appendChild(g);
-    pipeGroups.push(g);
-  });
-
-  function selectStage(i) {
-    pipeGroups.forEach(function (g, n) { g.setAttribute("aria-selected", n === i ? "true" : "false"); });
-    pipeDetail.innerHTML = "<p>" + STAGES[i].body + "</p>";
-  }
-  selectStage(0);
-
-  /* ---- demo timeline ------------------------------------------------- */
-
-  var BEATS = [
-    { t: "0:00", y: 24, name: "EMS handoff", clip: "01-handoff.mp4", crit: false,
-      said: "&ldquo;Nineteen year old female, GCS 13, she&rsquo;s confused, she can&rsquo;t give us a history. Open left tibia fracture, gross contamination. Heart rate 122, BP 104 over 68.&rdquo;",
-      note: "The ledger fills. Note what it also records: the patient cannot give a history, so from here the ledger is the only history that exists." },
-    { t: "0:28", y: 84, name: "Three requests, one unowned", clip: "02-requests.mp4", crit: false,
-      said: "&ldquo;Someone find out whether she&rsquo;s anticoagulated, get ortho down here, and repeat that pressure in five minutes.&rdquo;",
-      note: "Three Tasks land. Anticoagulation has nobody named, so owner is left off entirely rather than guessed from whoever happened to be speaking." },
-    { t: "0:35", y: 144, name: "One claimed, one dangling", clip: "03-claim.mp4", crit: false,
-      said: "&ldquo;I&rsquo;ve got ortho, I&rsquo;m calling them now.&rdquo;",
-      note: "Stateful extraction resolves this against the existing task instead of opening a new one. Ortho goes in-progress with an owner. Anticoagulation stays unowned." },
-    { t: "0:38", y: 204, name: "Outside-source allergy", clip: "04-allergy.mp4", crit: true,
-      said: "&ldquo;Mom just told me she has a severe penicillin allergy, anaphylaxis as a child.&rdquo;",
-      note: "Provenance records the mother as source and the nurse as relay. The substance is stored bare, with reaction and severity as separate fields, so a class lookup can actually match it." },
-    { t: "0:50", y: 264, name: "The conflicting order", clip: "05-conflict.mp4", crit: true,
-      said: "&ldquo;Let&rsquo;s get ampicillin-sulbactam, three grams IV, push it.&rdquo;",
-      note: "Twelve seconds after the allergy. RxNav resolves the order to a Penicillin-class Antibacterial and the agent speaks once, naming the class, the time and the source. It does not suggest a replacement." },
-    { t: "1:05", y: 324, name: "The agent asks the room", clip: "06-watchdog.mp4", crit: false,
-      said: "&ldquo;Determine anticoagulation status is still unanswered and nobody has taken it. Who is taking it?&rdquo;",
-      note: "The watchdog fires on its own timer, with nobody speaking and the room already moved on. It asks. It does not assign, and it does not advise." },
-    { t: "&mdash;", y: 384, name: "Handoff to someone who wasn't there", clip: "07-handoff.mp4", crit: false,
-      said: "&ldquo;What do I need to know?&rdquo;",
-      note: "Five panels instead of a transcript, spoken in about twenty seconds, with the still-unowned anticoagulation question leading the unresolved list." }
-  ];
-
-  var tlNodes = document.getElementById("tlNodes");
-  var screen = document.getElementById("screen");
-  var viewerBody = document.getElementById("viewerBody");
-  var tlGroups = [];
-
-  /* spine */
-  tlNodes.appendChild(el("line", { x1: 26, y1: 24, x2: 26, y2: 384, class: "edge-soft" }));
-  /* the 12-second bracket between allergy and order */
-  tlNodes.appendChild(el("path", { class: "edge-crit edge-dash", d: "M 12 204 H 4 V 264 H 12" }));
-
-  BEATS.forEach(function (b, i) {
-    var g = el("g", { class: "hit", role: "tab", "aria-selected": i === 0 ? "true" : "false",
-                      tabindex: "0", "aria-label": b.name });
-    g.appendChild(el("rect", { class: "box", x: 44, y: b.y - 20, width: 596, height: 44, rx: 10 }));
-    g.appendChild(el("circle", { class: b.crit ? "dot-crit" : "dot-ink", cx: 26, cy: b.y, r: b.crit ? 6 : 4.5 }));
-    g.appendChild(el("line", { class: b.crit ? "edge-crit" : "edge-soft", x1: 26, y1: b.y, x2: 44, y2: b.y }));
-    var t = el("text", { class: b.crit ? "tMc" : "tL", x: 62, y: b.y + 4 });
-    t.innerHTML = b.t;
-    g.appendChild(t);
-    g.appendChild(el("text", { class: "tHs", x: 118, y: b.y + 5 }, b.name));
-    g.addEventListener("click", function () { selectBeat(i); });
-    g.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectBeat(i); }
-    });
-    tlNodes.appendChild(g);
-    tlGroups.push(g);
-  });
-
-  function selectBeat(i) {
-    var b = BEATS[i];
-    tlGroups.forEach(function (g, n) { g.setAttribute("aria-selected", n === i ? "true" : "false"); });
-
-    /* Show a labelled slot until the clip actually loads, so a missing file
-       reads as "drop it here" rather than as a broken deck. */
-    screen.innerHTML = "";
-    var slot = document.createElement("div");
-    slot.className = "slot";
-    slot.innerHTML = '<span class="filename">deck/clips/' + b.clip + '</span>' +
-                     '<span class="hint">Drop this beat&rsquo;s screen-recording snippet here and it plays in place.</span>';
-    screen.appendChild(slot);
-
-    var v = document.createElement("video");
-    v.src = "clips/" + b.clip;
-    v.controls = true; v.playsInline = true; v.preload = "metadata";
-    v.addEventListener("loadeddata", function () { screen.innerHTML = ""; screen.appendChild(v); });
-
-    viewerBody.innerHTML = '<p class="said">' + b.said + '</p>' +
-                           '<p class="note">' + b.note + '</p>' +
-                           (b.crit ? '<span class="tag">FDA verified &middot; agent speaks</span>' : '');
-  }
-  selectBeat(0);
-
-  go(0);
 })();
+
+/* ══════════ demo timeline ══════════ */
+const BEATS=[
+  {t:'0:00',name:'EMS handoff',clip:'01-handoff.mp4',crit:false,
+   said:'“Nineteen year old female, GCS 13, she’s confused, she can’t give us a history.”'},
+  {t:'0:28',name:'Three requests, one unowned',clip:'02-requests.mp4',crit:false,
+   said:'“Someone find out whether she’s anticoagulated, get ortho down here, and repeat that pressure in five minutes.”'},
+  {t:'0:35',name:'One claimed, one dangling',clip:'03-claim.mp4',crit:false,
+   said:'“I’ve got ortho, I’m calling them now.”'},
+  {t:'0:38',name:'Outside-source allergy',clip:'04-allergy.mp4',crit:true,
+   said:'“Mom just told me she has a severe penicillin allergy, anaphylaxis as a child.”'},
+  {t:'0:50',name:'The conflicting order',clip:'05-conflict.mp4',crit:true,
+   said:'“Let’s get ampicillin-sulbactam, three grams IV, push it.”'},
+  {t:'1:05',name:'The agent asks the room',clip:'06-watchdog.mp4',crit:false,
+   said:'“Determine anticoagulation status is still unanswered and nobody has taken it. Who is taking it?”'},
+  {t:'—',name:'Handoff to someone who wasn’t there',clip:'07-handoff.mp4',crit:false,
+   said:'“What do I need to know?”'}
+];
+(function(){
+  const SVGNS='http://www.w3.org/2000/svg';
+  const nodes=document.getElementById('tlNodes'),
+        screen=document.getElementById('screen'), said=document.getElementById('said');
+  if(!nodes)return;
+  const mk=(tag,a,txt)=>{const n=document.createElementNS(SVGNS,tag);
+    for(const k in a)n.setAttribute(k,a[k]); if(txt!==undefined)n.textContent=txt; return n};
+
+  nodes.appendChild(mk('line',{x1:26,y1:30,x2:26,y2:430,class:'edge-soft'}));
+  nodes.appendChild(mk('path',{class:'edge-hot dash',d:'M 12 210 H 2 V 270 H 12'}));
+
+  const groups=[];
+  BEATS.forEach((b,i)=>{
+    const y=30+i*66;
+    const g=mk('g',{class:'hit','data-beat':'1',role:'tab',tabindex:'0',
+                    'aria-selected':i===0?'true':'false','aria-label':b.name});
+    g.style.cursor='pointer';
+    const r=mk('rect',{x:48,y:y-24,width:852,height:52,rx:14,class:'box'});
+    g.appendChild(r);
+    g.appendChild(mk('circle',{cx:26,cy:y,r:b.crit?9:6,class:b.crit?'d-hot':'d-ink'}));
+    g.appendChild(mk('line',{x1:26,y1:y,x2:48,y2:y,class:b.crit?'edge-hot':'edge-soft'}));
+    g.appendChild(mk('text',{x:70,y:y+7,class:b.crit?'dMh':'dL'},b.t));
+    g.appendChild(mk('text',{x:174,y:y+8,class:'dHs'},b.name));
+    const pick=()=>select(i);
+    g.addEventListener('click',ev=>{ev.stopPropagation();pick()});
+    g.addEventListener('keydown',ev=>{
+      if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();ev.stopPropagation();pick()}});
+    nodes.appendChild(g); groups.push({g,r});
+  });
+
+  function select(i){
+    const b=BEATS[i];
+    groups.forEach((o,n)=>{
+      o.g.setAttribute('aria-selected',n===i?'true':'false');
+      o.r.setAttribute('class',n===i?(BEATS[n].crit?'box-hot':'box-strong'):'box');
+    });
+    /* A labelled slot until the clip actually loads: a placeholder is honest,
+       a broken <video> element is not. */
+    screen.innerHTML='';
+    const slot=document.createElement('div');
+    slot.className='slot';
+    slot.innerHTML='<span class="fn">deck/clips/'+b.clip+'</span>'+
+      '<span class="hint">Screen-recording slot — drop this beat’s clip here and it plays in place.</span>';
+    screen.appendChild(slot);
+    const v=document.createElement('video');
+    v.src='clips/'+b.clip; v.controls=true; v.playsInline=true; v.preload='metadata';
+    v.addEventListener('loadeddata',()=>{screen.innerHTML='';screen.appendChild(v)});
+    said.textContent=b.said;
+  }
+  select(0);
+  window.__selectBeat=select;
+})();
+
+/* ══════════ per-slide choreography ══════════
+   Slide 07 is the only scripted sequence. The information it carries: the two
+   approaches run on the same input, and one of them arrives at an answer the
+   other structurally cannot reach. Racing them is the argument. */
+const RM=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const wait=ms=>new Promise(r=>setTimeout(r,RM?Math.min(ms,50):ms));
+let tok=0;
+function fire(i){
+  tok++; const id=tok, S=slides[i];
+  if(!S)return;
+
+  if(S.id==='raceSlide'){
+    const A=[...S.querySelectorAll('.rA')], B=[...S.querySelectorAll('.rB')];
+    [...A,...B].forEach(e=>{e.style.transition='none';e.style.opacity='0';e.style.transform='translateX(-18px)'});
+    void S.offsetWidth;
+    const show=e=>{e.style.transition='opacity 300ms var(--e-std-dec),transform 420ms var(--e-emph-dec)';
+                   e.style.opacity='1';e.style.transform='none'};
+    /* Kept tight on purpose: the full sequence lands in ~2.3s. An earlier cut ran
+       5s and left the slide reading as empty for most of it — a presenter who
+       advances at a normal pace would have shown a blank frame. */
+    (async()=>{
+      await wait(260); if(id!==tok)return;
+      for(const e of A){ if(id!==tok)return; show(e); await wait(130) }
+      await wait(320); if(id!==tok)return;
+      for(const e of B){ if(id!==tok)return; show(e); await wait(150) }
+    })();
+  }
+}
+
+goto(0);
 </script>
 </body>
 </html>
