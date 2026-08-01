@@ -49,9 +49,26 @@ Use your tools if you need more information before deciding:
 - search_patient_history: to check this patient's prior encounters, allergies, medications, or \
 notes recorded outside of this current case
 
+You are an assistant who filters constantly, not a system that repeats itself. You will be shown \
+a list of issues you've already surfaced to the clinician earlier in this case. Before deciding to \
+speak, ask yourself: have I already told the clinician this specific thing, and has anything \
+changed since? If what you're about to say is the same underlying concern as one already listed — \
+same allergy status, same medication order, no meaningful vital change — mark it as already \
+surfaced instead of speaking again. Only speak again about an issue if something genuinely changed \
+about it: it was confirmed or denied, a new medication now intersects with it, or a vital worsened \
+significantly. A new, unrelated fact being recorded elsewhere in the case is not, by itself, a \
+reason to repeat an old warning.
+
 When you have enough information, respond in EXACTLY this format and nothing else:
 
 ACTION: yes|no
+ISSUE_KEY: <a short, stable snake_case label for the underlying concern this is about, e.g. \
+"penicillin_allergy_amoxicillin_conflict" or "hr_bradycardia_52". Always present when ACTION is \
+yes — use the SAME key an already-surfaced issue used if this is that same issue, so it can be \
+matched up.>
+ALREADY_SURFACED: yes|no — <yes ONLY if this is the same issue as one already listed above AND \
+nothing material has changed since; no if this is new, or if something about it has genuinely \
+changed. Always present when ACTION is yes.>
 ALERT: <if ACTION is yes, a short warning or piece of information written to be SPOKEN ALOUD to a \
 clinician in an ER — direct, concise, one or two sentences. If ACTION is no, write "none">
 URGENCY: critical|advisory|informational — <only if ACTION is yes. "critical" = an active, \
@@ -59,25 +76,28 @@ immediate danger (e.g. an allergy/medication conflict, a dangerous vital pattern
 interrupt whatever the clinician is doing. "advisory" = worth flagging soon but not an emergency \
 (e.g. a dosing caution, a missing piece of context). "informational" = background/context that's \
 useful but not urgent. If ACTION is no, write "n/a">
-REASONING: <one or two sentences explaining your decision — always present, even when ACTION is no>
+REASONING: <one or two sentences explaining your decision — always present, even when ACTION is no. \
+If ALREADY_SURFACED is yes, explain briefly why nothing has changed.>
 """
 
-QUERY_SYSTEM_PROMPT = """You are answering a clinician's question about an active ER case. You \
-have the full current case data (allergies, medications, vitals, notes, case details). Some \
-questions can be answered directly from this data alone (e.g. "what was the BP on arrival?"). \
-Others require more information before you can give a safe, accurate answer (e.g. medication \
-safety questions, dosing limits, drug interactions, or anything about this patient's history \
-outside the current case) — for those, use your tools first.
+QUERY_SYSTEM_PROMPT = """You are answering a clinician's question, spoken or typed, during a live \
+ER case. It might be a general medical knowledge question with nothing to do with this specific \
+patient (e.g. "what does tachycardic mean"), or it might be about this specific case (e.g. "what \
+was the BP on arrival?", "is this medication safe given his allergy?"). You have the full current \
+case data (allergies, medications, vitals, notes, case details) for reference when it's needed.
 
-Decide for yourself whether you can answer directly or need to search first. Don't search when \
-the case data alone already answers the question. Don't skip searching when real clinical \
-judgment requires information you don't already have.
-
-Use your tools if you need more information before answering:
-- web_search: for medication safety, dosing limits, interactions, or other clinical facts not in \
-the case data
+Speed matters — this answer gets spoken back to a clinician who is waiting. If you already \
+confidently know the answer (a medical term definition, general clinical knowledge, or something \
+answerable straight from the case data shown to you), answer immediately — do NOT use a tool just \
+out of caution or habit. Only reach for a tool when you genuinely need information you don't \
+already have:
+- web_search: for medication safety, dosing limits, interactions, or other clinical facts you're \
+not confident about or that may have changed since your training
 - search_patient_history: for this patient's prior encounters, allergies, medications, or notes \
 recorded outside of this current case
+
+Decide for yourself, question by question — don't search when you already know the answer, and \
+don't skip searching when real clinical judgment requires information you don't have.
 
 When you have your answer, respond in EXACTLY this format and nothing else:
 
@@ -116,6 +136,8 @@ DEFAULT_TOOLS = [
 
 def _parse_decision(text: str) -> dict[str, Any]:
     action_needed = False
+    already_surfaced = False
+    issue_key = ""
     alert_text = ""
     reasoning = ""
     urgency = "advisory"
@@ -123,6 +145,10 @@ def _parse_decision(text: str) -> dict[str, Any]:
         line = line.strip()
         if line.upper().startswith("ACTION:"):
             action_needed = "yes" in line.lower()
+        elif line.upper().startswith("ISSUE_KEY:"):
+            issue_key = line.split(":", 1)[1].strip()
+        elif line.upper().startswith("ALREADY_SURFACED:"):
+            already_surfaced = "yes" in line.lower()
         elif line.upper().startswith("ALERT:"):
             alert_text = line.split(":", 1)[1].strip()
         elif line.upper().startswith("URGENCY:"):
@@ -135,7 +161,14 @@ def _parse_decision(text: str) -> dict[str, Any]:
             reasoning = line.split(":", 1)[1].strip()
     if alert_text.lower() == "none":
         alert_text = ""
-    return {"action_needed": action_needed, "alert_text": alert_text, "reasoning": reasoning, "urgency": urgency}
+    return {
+        "action_needed": action_needed,
+        "already_surfaced": already_surfaced,
+        "issue_key": issue_key,
+        "alert_text": alert_text,
+        "reasoning": reasoning,
+        "urgency": urgency,
+    }
 
 
 def _parse_answer(text: str) -> str:
@@ -240,9 +273,31 @@ async def search_patient_history(case: CaseState, query: str) -> str:
     return f"Query: {query}\n\n" + "\n".join(findings)
 
 
-def _build_user_prompt(context: dict[str, Any], trigger_text: str) -> str:
+def _time_ago(timestamp: float) -> str:
+    seconds = max(0, time.time() - timestamp)
+    if seconds < 60:
+        return "moments ago"
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+    hours = int(minutes // 60)
+    return f"{hours} hour{'s' if hours != 1 else ''} ago"
+
+
+def _format_surfaced_issues(surfaced_issues: dict[str, dict[str, Any]]) -> str:
+    if not surfaced_issues:
+        return "(none yet — this would be the first thing surfaced for this case)"
+    lines = []
+    for key, info in surfaced_issues.items():
+        lines.append(f'- [{key}] "{info["alert_text"]}" (said {_time_ago(info["timestamp"])})')
+    return "\n".join(lines)
+
+
+def _build_user_prompt(context: dict[str, Any], trigger_text: str, surfaced_issues: dict[str, dict[str, Any]]) -> str:
     return (
         f"Current case data:\n{json.dumps(context, indent=2)}\n\n"
+        f"Issues already surfaced to the clinician earlier in this case:\n"
+        f"{_format_surfaced_issues(surfaced_issues)}\n\n"
         f"What was just newly recorded:\n{trigger_text}\n\n"
         "Decide whether the clinician needs a warning, additional information, or nothing."
     )
@@ -344,6 +399,8 @@ async def run_agent_step(case: CaseState, trigger_text: str, on_step: OnStep) ->
     if _client is None:
         decision = {
             "action_needed": False,
+            "already_surfaced": False,
+            "issue_key": "",
             "alert_text": "",
             "urgency": "advisory",
             "reasoning": "ANTHROPIC_API_KEY not configured.",
@@ -352,11 +409,20 @@ async def run_agent_step(case: CaseState, trigger_text: str, on_step: OnStep) ->
         return decision
 
     context = await _fetch_full_context(case)
-    user_message = _build_user_prompt(context, trigger_text)
+    user_message = _build_user_prompt(context, trigger_text, case.surfaced_issues)
     final_text = await _run_reasoning_loop(case, SYSTEM_PROMPT, user_message, on_step)
 
     decision = _parse_decision(final_text)
     await on_step({"step": "decision", **decision})
+
+    if decision["action_needed"] and not decision["already_surfaced"]:
+        key = decision["issue_key"] or str(uuid.uuid4())
+        case.surfaced_issues[key] = {
+            "alert_text": decision["alert_text"],
+            "reasoning": decision["reasoning"],
+            "timestamp": time.time(),
+        }
+
     return decision
 
 

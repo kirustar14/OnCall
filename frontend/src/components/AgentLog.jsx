@@ -38,18 +38,25 @@ function StepBody({ step }) {
           <code>{step.tool}</code> returned: {step.result_summary}
         </span>
       );
-    case 'decision':
+    case 'decision': {
+      const label = step.already_surfaced
+        ? 'Re-considered — already told the clinician'
+        : step.action_needed
+          ? 'Action needed'
+          : 'No action needed';
       return (
         <span>
-          <strong>{step.action_needed ? 'Action needed' : 'No action needed'}</strong>
-          {step.action_needed ? <UrgencyTag urgency={step.urgency} /> : null}
+          <strong>{label}</strong>
+          {step.action_needed && !step.already_surfaced ? <UrgencyTag urgency={step.urgency} /> : null}
           {' — '}
           {step.reasoning}
-          {step.action_needed && step.alert_text ? (
+          {step.action_needed && step.alert_text && !step.already_surfaced ? (
             <div className="agent-log-spoken">🔊 "{step.alert_text}"</div>
           ) : null}
+          {step.already_surfaced ? <div className="agent-log-suppressed">🔇 not re-spoken — nothing new</div> : null}
         </span>
       );
+    }
     case 'answer':
       return (
         <span>
@@ -78,7 +85,10 @@ export default function AgentLog({ steps }) {
 
       <ul className="agent-log-list">
         {sorted.map((step) => (
-          <li key={step.id || `${step.case_id}-${step.timestamp}-${step.step}`} className={`agent-log-item step-${step.step}`}>
+          <li
+            key={step.id || `${step.case_id}-${step.timestamp}-${step.step}`}
+            className={`agent-log-item step-${step.step} ${step.already_surfaced ? 'agent-log-item-suppressed' : ''}`}
+          >
             <div className="agent-log-meta">
               <span className="agent-log-time">{formatTime(step.timestamp)}</span>
               <span className="agent-log-case">Case {step.case_id?.slice(0, 8)}</span>

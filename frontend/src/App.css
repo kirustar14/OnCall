@@ -594,3 +594,14 @@ body {
   color: var(--color-text-muted);
   font-style: italic;
 }
+
+.agent-log-suppressed {
+  margin-top: 8px;
+  color: var(--color-text-label);
+  font-style: italic;
+  font-size: 13px;
+}
+
+.agent-log-item-suppressed {
+  opacity: 0.6;
+}

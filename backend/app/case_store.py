@@ -59,6 +59,14 @@ class CaseState:
 
     alerts: list[Alert] = field(default_factory=list)
 
+    # Issues already spoken to the clinician, keyed by a short agent-assigned slug
+    # (e.g. "penicillin_allergy_amoxicillin_conflict"). The agent itself decides
+    # whether a new decision is the "same issue, nothing changed" as one of these
+    # (suppress) or genuinely new/changed (speak + update this record) — see
+    # app/agent.py. Never matched by exact string key in Python; it's bookkeeping
+    # the agent reads back, not something we diff against ourselves.
+    surfaced_issues: dict[str, dict[str, Any]] = field(default_factory=dict)
+
     # running, timestamped feed of every agent reasoning step (trigger / tool_call /
     # tool_result / decision) for the "Agent Log" tab. Each entry is a plain dict —
     # shape varies by step type, see app/agent.py.
@@ -93,6 +101,7 @@ class CaseState:
                 for a in self.alerts
             ],
             "agent_steps": self.agent_steps,
+            "surfaced_issues": self.surfaced_issues,
         }
 
 

@@ -14,6 +14,7 @@ from app.case_store import Alert, CaseState, TranscriptEntry, next_alert_seq, st
 from app.deepgram_stt import DeepgramSTTSession
 from app.deepgram_tts import synthesize_speech
 from app.extraction import run_extraction_and_persist
+from app.intent import classify_segment
 from app.medplum_client import medplum_client
 from app.ws_manager import ws_manager
 
@@ -101,26 +102,8 @@ async def query_case(req: QueryRequest):
     case = store.get(req.case_id)
     if case is None:
         return {"answer": f"No such case: {req.case_id}"}
-
-    try:
-        result = await run_query_step(case, req.question, on_step=lambda s: _emit_agent_step(case, s))
-    except Exception:
-        logger.exception("query agent step failed for case %s", case.case_id)
-        return {"answer": "Something went wrong answering that question."}
-
-    answer_text = result.get("answer", "")
-
-    alert = Alert(
-        id=str(uuid.uuid4()),
-        text=answer_text,
-        reasoning=f"Answered clinician query: {req.question}",
-        urgency="advisory",
-        timestamp=time.time(),
-        seq=next_alert_seq(),
-    )
-    await _speak_alert(case, alert)
-
-    return {"answer": answer_text}
+    answer = await _answer_query(case, req.question)
+    return {"answer": answer}
 
 
 def _structured_payload(case: CaseState) -> dict:
@@ -176,10 +159,48 @@ async def _speak_alert(case: CaseState, alert: Alert) -> None:
     )
 
 
+async def _answer_query(case: CaseState, question: str) -> str:
+    """Runs the query agent, banks + speaks the answer as an "advisory"-urgency
+    alert, and returns the answer text. Shared by the REST query box and
+    voice-detected questions caught mid-transcript."""
+    try:
+        result = await run_query_step(case, question, on_step=lambda s: _emit_agent_step(case, s))
+    except Exception:
+        logger.exception("query agent step failed for case %s", case.case_id)
+        return "Something went wrong answering that question."
+
+    answer_text = result.get("answer", "")
+
+    alert = Alert(
+        id=str(uuid.uuid4()),
+        text=answer_text,
+        reasoning=f"Answered clinician query: {question}",
+        urgency="advisory",
+        timestamp=time.time(),
+        seq=next_alert_seq(),
+    )
+    await _speak_alert(case, alert)
+
+    return answer_text
+
+
 async def _handle_finalized_segment(case: CaseState, segment: str) -> None:
-    """Run extraction -> Medplum writes -> (if anything new) full agentic reasoning
-    step -> push updates. The agent decides for itself whether to speak up; there's
-    no hardcoded conflict rule here."""
+    """First: is this a direct question for the assistant, or clinical narration?
+    Questions skip extraction entirely and go straight to the query agent. Narration
+    runs extraction -> Medplum writes -> (if anything new) full agentic reasoning
+    step -> push updates. The agent decides for itself whether to speak up — and
+    whether it's already told the clinician this — there's no hardcoded conflict
+    rule and no hardcoded repeat-suppression rule here, both are the model's call."""
+    try:
+        is_question = await classify_segment(segment)
+    except Exception:
+        logger.exception("intent classification failed for case %s — treating as narration", case.case_id)
+        is_question = False
+
+    if is_question:
+        await _answer_query(case, segment)
+        return
+
     try:
         _extracted, new_facts = await run_extraction_and_persist(case, segment)
     except Exception:
@@ -200,6 +221,10 @@ async def _handle_finalized_segment(case: CaseState, segment: str) -> None:
         return
 
     if not decision.get("action_needed") or not decision.get("alert_text"):
+        return
+
+    if decision.get("already_surfaced"):
+        # Already logged via the "decision" agent_step above — nothing new to speak.
         return
 
     await _speak_alert(case, make_alert(decision))
