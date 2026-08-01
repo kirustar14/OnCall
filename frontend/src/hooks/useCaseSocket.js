@@ -211,22 +211,48 @@ export function useCaseSocket(caseId, onAgentStep) {
         // `ideal` rather than `exact` so a device that has since disconnected
         // falls back to the default instead of failing the whole case open.
         const savedInput = getSavedInput();
-        const media = await navigator.mediaDevices.getUserMedia({
-          audio: savedInput ? { deviceId: { ideal: savedInput } } : true,
-          video: true,
-        });
+        const audioConstraint = savedInput ? { deviceId: { ideal: savedInput } } : true;
+
+        // Capture devices are an enhancement, never a precondition. This used to
+        // sit in the outer try, so a laptop with no camera — or one where the
+        // browser blocked it — threw here and the WebSocket below was never
+        // opened, failing the case outright. File mode needs neither a camera
+        // nor a microphone, and it is the mode a noisy venue gets demoed from,
+        // so losing the whole case to an absent camera is the wrong trade.
+        // Degrade in steps and connect regardless.
+        let media = null;
+        try {
+          media = await navigator.mediaDevices.getUserMedia({
+            audio: audioConstraint,
+            video: true,
+          });
+        } catch (err) {
+          console.warn('camera+mic unavailable, trying audio only', err);
+          try {
+            media = await navigator.mediaDevices.getUserMedia({ audio: audioConstraint });
+          } catch (err2) {
+            console.warn('no capture devices available — file playback still works', err2);
+          }
+        }
+
         if (cancelled) {
-          media.getTracks().forEach((t) => t.stop());
+          media?.getTracks().forEach((t) => t.stop());
           return;
         }
-        mediaStreamRef.current = media;
-        setVideoStream(media);
-        // Hold a grabber on the stream so a capture is instant rather than
-        // spinning up a video element at the moment someone needs an answer.
-        grabberRef.current = createFrameGrabber(media);
-        // Continuous local capture. Frames stay in memory and expire; the only
-        // one that ever leaves is the one matching a moment worth explaining.
-        bufferRef.current = startFrameBuffer(grabberRef.current);
+
+        if (media) {
+          mediaStreamRef.current = media;
+          setVideoStream(media);
+          // A grabber only makes sense if a camera actually came back.
+          if (media.getVideoTracks().length > 0) {
+            // Hold a grabber on the stream so a capture is instant rather than
+            // spinning up a video element at the moment someone needs an answer.
+            grabberRef.current = createFrameGrabber(media);
+            // Continuous local capture. Frames stay in memory and expire; the
+            // only one that leaves is the one matching a moment worth explaining.
+            bufferRef.current = startFrameBuffer(grabberRef.current);
+          }
+        }
 
         const ws = new WebSocket(`${WS_BASE}/ws/case/${caseId}`);
         ws.binaryType = 'arraybuffer';
@@ -238,6 +264,10 @@ export function useCaseSocket(caseId, onAgentStep) {
           // In file mode the mic stays closed, so a clip playing out loud can't
           // be picked up twice.
           if (inputModeRef.current !== 'mic') return;
+          if (!media || media.getAudioTracks().length === 0) {
+            console.warn('mic mode selected but no microphone is available — switch to file input');
+            return;
+          }
           try {
             audioCaptureRef.current = await startAudioCapture(media, (buf) => {
               if (ws.readyState === WebSocket.OPEN) ws.send(buf);
