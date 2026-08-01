@@ -39,6 +39,21 @@ export function useCaseSocket(caseId, onAgentStep) {
 
   useEffect(() => {
     let cancelled = false;
+    const dismissTimers = new Set();
+
+    // Marks a banner "leaving" (triggers its CSS fade) then actually drops it
+    // from state a beat later. Split into two steps so the fade is visible —
+    // removing it from the array outright would just make it vanish instantly.
+    function dismissAlert(alertId) {
+      if (cancelled) return;
+      setAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, leaving: true } : a)));
+      const timer = setTimeout(() => {
+        dismissTimers.delete(timer);
+        if (cancelled) return;
+        setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+      }, 320);
+      dismissTimers.add(timer);
+    }
 
     function handleMessage(msg) {
       if (msg.type === 'transcript') {
@@ -63,6 +78,7 @@ export function useCaseSocket(caseId, onAgentStep) {
           timestamp: msg.alert.timestamp,
           audioB64: msg.audio_b64,
           audioMime: msg.audio_mime,
+          onSpoken: () => dismissAlert(msg.alert.id),
         });
       } else if (msg.type === 'agent_step') {
         onAgentStepRef.current?.(msg);
@@ -117,6 +133,8 @@ export function useCaseSocket(caseId, onAgentStep) {
 
     return () => {
       cancelled = true;
+      dismissTimers.forEach(clearTimeout);
+      dismissTimers.clear();
       stopAudioCapture(audioCaptureRef.current);
       audioCaptureRef.current = null;
       if (mediaStreamRef.current) mediaStreamRef.current.getTracks().forEach((t) => t.stop());

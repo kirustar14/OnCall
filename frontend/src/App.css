@@ -191,6 +191,15 @@ body {
   font-weight: 600;
   font-size: 14px;
   box-shadow: 0 2px 8px rgba(179, 38, 30, 0.25);
+  opacity: 1;
+  transition: opacity 300ms ease;
+}
+
+/* Applied the instant a banner's own spoken alert finishes (or fails to play) —
+   fades out in place before it's dropped from the list a beat later, so it
+   doesn't just pop out of the stack. */
+.alert-banner.leaving {
+  opacity: 0;
 }
 
 /* Urgency steps the banner down in intensity, but never into the quiet palette —

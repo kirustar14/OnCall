@@ -48,7 +48,10 @@ function playNext() {
   const next = queue.shift();
 
   if (!next.audioB64) {
-    // Nothing to actually speak (TTS unavailable/failed) — move straight on.
+    // Nothing to actually speak (TTS unavailable/failed) — this alert's turn in
+    // the audio queue is effectively already "over," so tell the caller right
+    // away rather than leaving its banner waiting on an event that will never fire.
+    next.onSpoken?.();
     playNext();
     return;
   }
@@ -60,6 +63,7 @@ function playNext() {
   } catch (err) {
     console.warn('failed to decode queued alert audio', err);
     isPlaying = false;
+    next.onSpoken?.();
     playNext();
     return;
   }
@@ -68,6 +72,7 @@ function playNext() {
   const finish = () => {
     URL.revokeObjectURL(url);
     isPlaying = false;
+    next.onSpoken?.();
     playNext();
   };
   audio.onended = finish;
@@ -82,9 +87,17 @@ function playNext() {
  * Add a spoken alert to the queue. Safe to call as often as alerts arrive — only
  * one will ever play at a time, in priority order. Purely additive: does not
  * affect anything visual (banners/Agent Log render immediately regardless).
+ *
+ * `onSpoken`, if given, fires exactly once for THIS item — when its audio ends,
+ * errors, is blocked, fails to decode, or (if there's no audio at all) right
+ * away — so a caller can tie something (like dismissing a banner) to this one
+ * alert's own playback lifecycle rather than to the queue in general.
  */
-export function enqueueAlert({ id, caseId, caseStatus, urgency, seq, timestamp, audioB64, audioMime }) {
-  if (!audioB64) return;
+export function enqueueAlert({ id, caseId, caseStatus, urgency, seq, timestamp, audioB64, audioMime, onSpoken }) {
+  if (!audioB64) {
+    onSpoken?.();
+    return;
+  }
   queue.push({
     id,
     caseId,
@@ -94,6 +107,7 @@ export function enqueueAlert({ id, caseId, caseStatus, urgency, seq, timestamp, 
     timestamp,
     audioB64,
     audioMime,
+    onSpoken,
   });
   playNext();
 }
