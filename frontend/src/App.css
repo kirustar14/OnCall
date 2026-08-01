@@ -637,3 +637,135 @@ body {
 .handoff-cell.unresolved h5 {
   color: #f0a840;
 }
+
+/* ---------- speaker role assignment ---------- */
+
+.speaker-roles {
+  margin-top: 16px;
+  background: #14161b;
+  border: 1px solid #262a33;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.speaker-roles-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.speaker-roles-head h4 {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8a919e;
+}
+
+.speaker-roles-sub {
+  flex: 1;
+  font-size: 11px;
+  color: #5b616c;
+}
+
+.speaker-roles-warn {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #f0a840;
+  border: 1px solid #4a3a1c;
+  background: #241c0d;
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.speaker-row {
+  border-top: 1px solid #262a33;
+  padding: 9px 0 4px;
+}
+
+.speaker-row:first-of-type {
+  border-top: none;
+}
+
+.speaker-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.speaker-index {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #8a919e;
+}
+
+.speaker-role-assigned {
+  font-size: 12px;
+  font-weight: 600;
+  color: #35d0a5;
+}
+
+.speaker-unassigned {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #f0a840;
+}
+
+.speaker-count {
+  margin-left: auto;
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #5b616c;
+}
+
+.speaker-sample {
+  margin: 4px 0 6px;
+  font-size: 11.5px;
+  color: #8a919e;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.speaker-actions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.speaker-actions button {
+  background: #1b1e25;
+  border: 1px solid #262a33;
+  color: #c6cad3;
+  border-radius: 5px;
+  padding: 4px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.speaker-actions button:hover {
+  background: #232833;
+}
+
+.speaker-actions button.on {
+  background: #0f3d33;
+  border-color: #35d0a5;
+  color: #35d0a5;
+}
+
+.speaker-actions input {
+  background: #1b1e25;
+  border: 1px solid #262a33;
+  color: #e8eaed;
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 11px;
+  width: 74px;
+}
+
+.speaker-actions input::placeholder {
+  color: #5b616c;
+}

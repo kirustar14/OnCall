@@ -2,6 +2,7 @@ import { useCaseSocket } from '../hooks/useCaseSocket';
 import VideoPreview from './VideoPreview';
 import Ledger from './Ledger';
 import HandoffPanel from './HandoffPanel';
+import SpeakerRoles from './SpeakerRoles';
 
 function StatusBadge({ status }) {
   const label = {
@@ -39,10 +40,13 @@ export default function CaseSession({ caseId, active }) {
     structured,
     alerts,
     videoStream,
+    speakers,
+    speakerRoles,
     unownedPrompt,
     handoffBrief,
     handoffLoading,
     endCase,
+    assignSpeakerRole,
     requestHandoff,
     dismissHandoff,
   } = useCaseSocket(caseId);
@@ -83,6 +87,12 @@ export default function CaseSession({ caseId, active }) {
               </button>
             )}
           </div>
+
+          <SpeakerRoles
+            speakers={speakers}
+            speakerRoles={speakerRoles}
+            onAssign={assignSpeakerRole}
+          />
         </div>
 
         <div className="transcript-column">

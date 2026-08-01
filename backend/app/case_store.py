@@ -6,7 +6,7 @@ import os
 import threading
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, Optional
 
@@ -42,11 +42,18 @@ class TranscriptEntry:
 
 @dataclass
 class Alert:
+    """A surfaced conflict. Deliberately has no "alternative" field — this
+    system states what is documented and how it relates to what was ordered.
+    It does not recommend a substitute drug."""
+
     id: str
     text: str
     allergen: str
-    alternative: str
     timestamp: float
+    # The class that links the order to the allergy, e.g. "penicillin (beta-lactam)".
+    drug_class: str = ""
+    # Where the allergy came from — "parent via nurse", "EMS handoff".
+    source: str = ""
 
 
 @dataclass
@@ -184,12 +191,23 @@ class CaseState:
                     "id": a.id,
                     "text": a.text,
                     "allergen": a.allergen,
-                    "alternative": a.alternative,
+                    "drug_class": a.drug_class,
+                    "source": a.source,
                     "timestamp": a.timestamp,
                 }
                 for a in self.alerts
             ],
         }
+
+
+def _rebuild(cls, raw: dict[str, Any]):
+    """Rebuild a dataclass from a snapshot dict, ignoring keys it no longer has.
+
+    Snapshots outlive schema changes — a file written before `Alert.alternative`
+    was removed must still load rather than crashing the whole restore.
+    """
+    known = {f.name for f in fields(cls)}
+    return cls(**{k: v for k, v in raw.items() if k in known})
 
 
 class CaseStore:
@@ -247,10 +265,10 @@ class CaseStore:
                         continue
                     if hasattr(case, key):
                         setattr(case, key, value)
-                case.work = [WorkItem(**w) for w in raw.get("work", [])]
-                case.alerts = [Alert(**a) for a in raw.get("alerts", [])]
+                case.work = [_rebuild(WorkItem, w) for w in raw.get("work", [])]
+                case.alerts = [_rebuild(Alert, a) for a in raw.get("alerts", [])]
                 case.transcript_entries = [
-                    TranscriptEntry(**t) for t in raw.get("transcript_entries", [])
+                    _rebuild(TranscriptEntry, t) for t in raw.get("transcript_entries", [])
                 ]
                 case.speaker_roles = {int(k): v for k, v in (raw.get("speaker_roles") or {}).items()}
                 self._cases[cid] = case

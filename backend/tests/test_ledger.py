@@ -11,20 +11,30 @@ the server validates against.
 """
 
 import asyncio
+import inspect
+import json
 import os
 import sys
 import tempfile
 import time
+from dataclasses import fields as dc_fields
 
 from app.case_store import (
     OPEN_STATUSES,
     WORK_STATUS_TO_FHIR,
+    Alert,
     CaseState,
     CaseStore,
     WorkItem,
 )
 from app.deepgram_stt import _dominant_speaker
 from app.extraction import _normalize
+from app.intervention import (
+    CONFLICT_SCHEMA,
+    CONFLICT_SYSTEM_PROMPT,
+    _assess_conflict,
+    _spoken_alert,
+)
 from app.medplum_client import MedplumClient, _trigger_seconds
 from app.watchdog import _find_orphan, _prompt_text
 
@@ -328,6 +338,90 @@ def test_persistence() -> None:
         check("persist: missing snapshot loads zero, no crash", store_c.load() == 0)
 
 
+# --- 8. the no-recommendation boundary ---------------------------------------
+
+
+def test_no_recommendations() -> None:
+    """The product states facts and their provenance. It must not advise.
+    These assertions exist so the boundary can't drift back in quietly."""
+
+    check(
+        "boundary: Alert has no 'alternative' field",
+        "alternative" not in {f.name for f in dc_fields(Alert)},
+    )
+    check(
+        "boundary: conflict schema cannot return an alternative drug",
+        "alternative" not in CONFLICT_SCHEMA["properties"],
+    )
+    check(
+        "boundary: conflict schema returns class + basis only",
+        set(CONFLICT_SCHEMA["properties"]) == {"conflict", "drug_class", "basis"},
+        f"got {set(CONFLICT_SCHEMA['properties'])}",
+    )
+    check(
+        "boundary: system prompt forbids naming an alternative",
+        "Do not name an alternative drug" in CONFLICT_SYSTEM_PROMPT,
+    )
+    check(
+        "boundary: no web_search tool in the conflict path",
+        "web_search" not in inspect.getsource(_assess_conflict),
+    )
+
+    case = CaseState(case_id="45abcdef")
+    allergy = {"allergen": "penicillin", "source": "parent via nurse", "timestamp": time.time() - 120}
+    med = {"name": "ampicillin-sulbactam 3 g IV", "status": "ordered"}
+    assessment = {
+        "conflict": True,
+        "drug_class": "penicillin (beta-lactam)",
+        "basis": "Ampicillin-sulbactam is a penicillin",
+    }
+    spoken = _spoken_alert(case, allergy, med, assessment)
+
+    check("alert: names what was ordered", "ampicillin-sulbactam" in spoken.lower(), spoken)
+    check("alert: names the documented allergy", "penicillin allergy" in spoken.lower(), spoken)
+    check("alert: states when it was recorded", "minute" in spoken, spoken)
+    check("alert: attributes the source", "parent via nurse" in spoken, spoken)
+    check("alert: states the class relationship", "is a penicillin" in spoken, spoken)
+
+    advice = ["recommend", "instead", "give ", "switch to", "use ", "should"]
+    found = [w for w in advice if w in spoken.lower()]
+    check("alert: contains NO advice language", not found, f"found {found} in: {spoken}")
+
+
+# --- 9. snapshot schema drift ------------------------------------------------
+
+
+def test_snapshot_drift() -> None:
+    """A snapshot written before a field was removed must still load."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "old.json")
+        legacy = {
+            "case-old": {
+                "case_id": "case-old",
+                "alerts": [
+                    {
+                        "id": "a1",
+                        "text": "old alert",
+                        "allergen": "penicillin",
+                        "alternative": "vancomycin",  # field no longer exists
+                        "timestamp": 1.0,
+                    }
+                ],
+                "work": [],
+                "transcript_entries": [],
+            }
+        }
+        with open(path, "w") as fh:
+            json.dump(legacy, fh)
+
+        s = CaseStore(snapshot_path=path)
+        restored = s.load()
+        check("drift: legacy snapshot still loads", restored == 1, f"got {restored}")
+        case = s.get("case-old")
+        check("drift: alert survives", case is not None and len(case.alerts) == 1)
+        check("drift: removed field is dropped, not fatal", not hasattr(case.alerts[0], "alternative"))
+
+
 def main() -> int:
     test_normalize()
     test_trigger_seconds()
@@ -336,6 +430,8 @@ def main() -> int:
     asyncio.run(test_fhir_bodies())
     test_speaker_attribution()
     test_persistence()
+    test_no_recommendations()
+    test_snapshot_drift()
 
     for name in PASSED:
         print(f"  PASS  {name}")

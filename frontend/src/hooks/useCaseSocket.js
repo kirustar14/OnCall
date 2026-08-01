@@ -33,6 +33,9 @@ export function useCaseSocket(caseId) {
   const [structured, setStructured] = useState(emptyStructured);
   const [alerts, setAlerts] = useState([]);
   const [videoStream, setVideoStream] = useState(null);
+  // Diarization indices seen so far, with a sample of what each said — you map
+  // a voice to a role by recognising the line, not by guessing at a number.
+  const [speakers, setSpeakers] = useState({});
   // The agent asking the room who owns something. Transient — clears on answer.
   const [unownedPrompt, setUnownedPrompt] = useState(null);
   const [handoffBrief, setHandoffBrief] = useState(null);
@@ -50,6 +53,20 @@ export function useCaseSocket(caseId) {
         if (msg.is_final) {
           setTranscript((prev) => (prev ? `${prev} ${msg.text}` : msg.text));
           setInterim('');
+          if (typeof msg.speaker_index === 'number') {
+            setSpeakers((prev) => {
+              const seen = prev[msg.speaker_index] || { count: 0, sample: '' };
+              return {
+                ...prev,
+                [msg.speaker_index]: {
+                  count: seen.count + 1,
+                  // Keep the first thing they said — it's usually the most
+                  // recognisable ("Medic 6 with a nineteen year old female...").
+                  sample: seen.sample || msg.text,
+                },
+              };
+            });
+          }
         } else {
           setInterim(msg.text);
         }
@@ -142,6 +159,23 @@ export function useCaseSocket(caseId) {
     setStatus('closed');
   }, []);
 
+  const assignSpeakerRole = useCallback(
+    async (speakerIndex, role) => {
+      try {
+        await fetch(`${API_BASE}/api/speaker-role`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ case_id: caseId, speaker_index: speakerIndex, role }),
+        });
+        // The server pushes updated case_data over the socket, which is what
+        // actually updates speaker_roles here.
+      } catch (err) {
+        console.error('speaker role assignment failed', err);
+      }
+    },
+    [caseId],
+  );
+
   const requestHandoff = useCallback(async () => {
     setHandoffLoading(true);
     try {
@@ -168,10 +202,13 @@ export function useCaseSocket(caseId) {
     structured,
     alerts,
     videoStream,
+    speakers,
+    speakerRoles: structured.speaker_roles || {},
     unownedPrompt,
     handoffBrief,
     handoffLoading,
     endCase,
+    assignSpeakerRole,
     requestHandoff,
     dismissHandoff: () => setHandoffBrief(null),
   };

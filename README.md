@@ -14,8 +14,21 @@ be swapped for a glasses feed later without touching the rest of the pipeline.
 - **Backend:** FastAPI with WebSocket audio streaming (`backend/`)
 - **Voice:** Deepgram (streaming STT + TTS)
 - **Clinical data:** Medplum (FHIR), OAuth2 client-credentials auth
-- **Reasoning:** Anthropic Claude (structured extraction, allergy/medication conflict checks with
-  `web_search` for alternatives)
+- **Reasoning:** Anthropic Claude (structured extraction, ledger resolution, drug-class conflict
+  reasoning, handoff synthesis)
+
+### What it will not do
+
+Servare states facts and where they came from. It does **not** recommend treatment — no
+suggested alternative drug, no "give this instead". When an ordered medication belongs to a
+class the patient is documented allergic to, it says exactly that, names when the allergy was
+recorded and who it came from, and stops. The clinician draws the conclusion.
+
+That boundary is deliberate: software that recommends a therapy is a different regulatory and
+liability object than software that surfaces information a clinician can independently review,
+and the second is the honest description of what a language model is reliably good at. It is
+also why every assertion carries a `Provenance` resource — the basis is inspectable rather than
+trusted. `backend/tests/test_ledger.py` asserts the boundary so it can't quietly drift back.
 
 ## Setup
 
