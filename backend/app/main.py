@@ -2,16 +2,18 @@ import asyncio
 import base64
 import json
 import logging
+import time
+import uuid
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.agent import make_alert, run_agent_step
 from app.case_store import CaseState, TranscriptEntry, store
 from app.deepgram_stt import DeepgramSTTSession
 from app.deepgram_tts import synthesize_speech
 from app.extraction import run_extraction_and_persist
-from app.intervention import check_for_conflicts
 from app.medplum_client import medplum_client
 from app.query import answer_question
 from app.ws_manager import ws_manager
@@ -59,6 +61,32 @@ async def get_case(case_id: str):
     return case.to_dict()
 
 
+@app.get("/api/agent_log")
+async def get_agent_log():
+    """All agent reasoning steps across every case, oldest first — used to hydrate
+    the Agent Log tab on load; live updates after that come over each case's WS."""
+    steps = [step for case in store.all() for step in case.agent_steps]
+    steps.sort(key=lambda s: s.get("timestamp", 0))
+    return steps
+
+
+class SimulateTranscriptRequest(BaseModel):
+    case_id: str
+    text: str
+
+
+@app.post("/api/debug/simulate_transcript")
+async def simulate_transcript(req: SimulateTranscriptRequest):
+    """Dev/demo helper: inject a line as if Deepgram had just finalized it, without
+    needing a live microphone — handy for rehearsing the demo script or testing the
+    extraction/agent pipeline against a specific case that's already got a socket open."""
+    case = store.get(req.case_id) or store.create(req.case_id)
+    await ws_manager.send_json(req.case_id, {"type": "transcript", "text": req.text, "is_final": True})
+    case.running_transcript = (case.running_transcript + " " + req.text).strip()
+    await _handle_finalized_segment(case, req.text)
+    return {"ok": True}
+
+
 class QueryRequest(BaseModel):
     case_id: str
     question: str
@@ -87,46 +115,63 @@ def _structured_payload(case: CaseState) -> dict:
     }
 
 
+async def _emit_agent_step(case: CaseState, step: dict) -> None:
+    step_with_meta = {"id": str(uuid.uuid4()), "case_id": case.case_id, "timestamp": time.time(), **step}
+    case.agent_steps.append(step_with_meta)
+    await ws_manager.send_json(case.case_id, {"type": "agent_step", **step_with_meta})
+
+
 async def _handle_finalized_segment(case: CaseState, segment: str) -> None:
-    """Run extraction -> Medplum writes -> intervention check -> push updates."""
+    """Run extraction -> Medplum writes -> (if anything new) full agentic reasoning
+    step -> push updates. The agent decides for itself whether to speak up; there's
+    no hardcoded conflict rule here."""
     try:
-        await run_extraction_and_persist(case, segment)
+        _extracted, new_facts = await run_extraction_and_persist(case, segment)
     except Exception:
         logger.exception("extraction pipeline failed for case %s", case.case_id)
         return
 
     await ws_manager.send_json(case.case_id, _structured_payload(case))
 
+    if not new_facts:
+        return
+
+    trigger_text = "\n".join(new_facts)
+
     try:
-        new_alerts = await check_for_conflicts(case)
+        decision = await run_agent_step(case, trigger_text, on_step=lambda s: _emit_agent_step(case, s))
     except Exception:
-        logger.exception("intervention check failed for case %s", case.case_id)
-        new_alerts = []
+        logger.exception("agent reasoning step failed for case %s", case.case_id)
+        return
 
-    for alert in new_alerts:
-        audio_b64 = None
-        try:
-            audio_bytes = await synthesize_speech(alert.text)
-            if audio_bytes:
-                audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
-        except Exception:
-            logger.exception("TTS failed for case %s", case.case_id)
+    if not decision.get("action_needed") or not decision.get("alert_text"):
+        return
 
-        await ws_manager.send_json(
-            case.case_id,
-            {
-                "type": "alert",
-                "alert": {
-                    "id": alert.id,
-                    "text": alert.text,
-                    "allergen": alert.allergen,
-                    "alternative": alert.alternative,
-                    "timestamp": alert.timestamp,
-                },
-                "audio_b64": audio_b64,
-                "audio_mime": "audio/mpeg",
+    alert = make_alert(decision)
+    case.alerts.append(alert)
+
+    audio_b64 = None
+    try:
+        audio_bytes = await synthesize_speech(alert.text)
+        if audio_bytes:
+            audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+    except Exception:
+        logger.exception("TTS failed for case %s", case.case_id)
+
+    await ws_manager.send_json(
+        case.case_id,
+        {
+            "type": "alert",
+            "alert": {
+                "id": alert.id,
+                "text": alert.text,
+                "reasoning": alert.reasoning,
+                "timestamp": alert.timestamp,
             },
-        )
+            "audio_b64": audio_b64,
+            "audio_mime": "audio/mpeg",
+        },
+    )
 
 
 @app.websocket("/ws/case/{case_id}")

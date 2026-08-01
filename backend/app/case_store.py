@@ -18,8 +18,7 @@ class TranscriptEntry:
 class Alert:
     id: str
     text: str
-    allergen: str
-    alternative: str
+    reasoning: str
     timestamp: float
 
 
@@ -47,6 +46,11 @@ class CaseState:
 
     alerts: list[Alert] = field(default_factory=list)
 
+    # running, timestamped feed of every agent reasoning step (trigger / tool_call /
+    # tool_result / decision) for the "Agent Log" tab. Each entry is a plain dict —
+    # shape varies by step type, see app/agent.py.
+    agent_steps: list[dict[str, Any]] = field(default_factory=list)
+
     # bookkeeping for extraction: how much of running_transcript has been sent to Claude already
     last_extracted_offset: int = 0
 
@@ -68,12 +72,12 @@ class CaseState:
                 {
                     "id": a.id,
                     "text": a.text,
-                    "allergen": a.allergen,
-                    "alternative": a.alternative,
+                    "reasoning": a.reasoning,
                     "timestamp": a.timestamp,
                 }
                 for a in self.alerts
             ],
+            "agent_steps": self.agent_steps,
         }
 
 

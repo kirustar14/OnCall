@@ -29,8 +29,11 @@ function StructuredList({ title, items, render }) {
   );
 }
 
-export default function CaseSession({ caseId, active }) {
-  const { status, transcript, interim, structured, alerts, videoStream, endCase } = useCaseSocket(caseId);
+export default function CaseSession({ caseId, active, onAgentStep }) {
+  const { status, transcript, interim, structured, alerts, videoStream, endCase } = useCaseSocket(
+    caseId,
+    onAgentStep
+  );
 
   return (
     <div className={`case-session ${active ? '' : 'hidden'} ${status === 'closed' ? 'case-closed' : ''}`}>

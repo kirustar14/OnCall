@@ -28,8 +28,8 @@ Extract into these fields:
 if stated>, "status": "ordered" or "given", "source": <as above>}
 - "notes": any other explicitly stated case detail (age, sex, mechanism of injury, chief complaint, \
 past medical history) as a short free-text sentence. Empty string if nothing else notable.
-- "case_details": structured demographic/incident facts if stated: {"age": <string or "">, \
-"sex": <string or "">, "mechanism": <string or "">}
+- "case_details": structured demographic/incident facts if stated: {"name": <patient's name, string \
+or "" if not stated>, "age": <string or "">, "sex": <string or "">, "mechanism": <string or "">}
 
 If a category has nothing new in this segment, return an empty array/string for it. Infer "source" \
 from context (e.g. "medics say", "the mother told the nurse") — default to "clinician transcript" if \
@@ -80,11 +80,12 @@ OUTPUT_SCHEMA = {
         "case_details": {
             "type": "object",
             "properties": {
+                "name": {"type": "string"},
                 "age": {"type": "string"},
                 "sex": {"type": "string"},
                 "mechanism": {"type": "string"},
             },
-            "required": ["age", "sex", "mechanism"],
+            "required": ["name", "age", "sex", "mechanism"],
             "additionalProperties": False,
         },
     },
@@ -117,13 +118,16 @@ async def extract_from_segment(transcript_segment: str) -> dict:
     return await asyncio.to_thread(_call)
 
 
-async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -> dict:
+async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -> tuple[dict, list[str]]:
     """Extract structured facts from a transcript segment, merge into the case's
-    in-memory structured data, and write each fact to Medplum. Returns the diff
-    (newly extracted facts) so callers (e.g. the intervention agent) can react."""
+    in-memory structured data, and write each fact to Medplum. Returns the raw
+    extraction plus a list of short human-readable descriptions of facts that were
+    ACTUALLY NEW (not already known) — this is what triggers the reasoning agent,
+    so a repeated/already-known fact doesn't cause a redundant agent step."""
 
     extracted = await extract_from_segment(transcript_segment)
     now = time.time()
+    new_facts: list[str] = []
 
     if medplum_client.configured and (case.patient_id is None or case.encounter_id is None):
         try:
@@ -143,6 +147,7 @@ async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -
             continue
         entry = {"allergen": allergen, "source": allergy.get("source", "clinician transcript"), "timestamp": now}
         case.allergies.append(entry)
+        new_facts.append(f"New allergy recorded: {allergen} (source: {entry['source']})")
         if case.patient_id and case.encounter_id:
             try:
                 await medplum_client.write_allergy(case.patient_id, case.encounter_id, allergen, entry["source"], now)
@@ -156,6 +161,7 @@ async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -
             continue
         entry = {"name": name, "value": value, "source": vital.get("source", "clinician transcript"), "timestamp": now}
         case.vitals.append(entry)
+        new_facts.append(f"New vital recorded: {name} {value} (source: {entry['source']})")
         if case.patient_id and case.encounter_id:
             try:
                 await medplum_client.write_vital(case.patient_id, case.encounter_id, name, value, entry["source"], now)
@@ -175,6 +181,7 @@ async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -
             "timestamp": now,
         }
         case.medications.append(entry)
+        new_facts.append(f"New medication recorded: {name} — {entry['status']} (source: {entry['source']})")
         if case.patient_id and case.encounter_id:
             try:
                 await medplum_client.write_medication_request(
@@ -186,11 +193,18 @@ async def run_extraction_and_persist(case: CaseState, transcript_segment: str) -
     notes = extracted.get("notes", "").strip()
     if notes:
         case.notes.append(notes)
+        new_facts.append(f"New note: {notes}")
 
     details = extracted.get("case_details", {}) or {}
-    for key in ("age", "sex", "mechanism"):
+    for key in ("name", "age", "sex", "mechanism"):
         val = (details.get(key) or "").strip()
         if val and not case.case_details.get(key):
             case.case_details[key] = val
+            new_facts.append(f"Patient {key} recorded: {val}")
+            if key == "name" and medplum_client.configured and case.patient_id:
+                try:
+                    await medplum_client.update_patient_name(case.patient_id, val)
+                except Exception:
+                    logger.exception("medplum: failed to update patient name for case %s", case.case_id)
 
-    return extracted
+    return extracted, new_facts

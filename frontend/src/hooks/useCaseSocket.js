@@ -11,7 +11,7 @@ const emptyStructured = {
   case_details: {},
 };
 
-export function useCaseSocket(caseId) {
+export function useCaseSocket(caseId, onAgentStep) {
   const [status, setStatus] = useState('connecting'); // connecting | recording | closed | error
   const [transcript, setTranscript] = useState('');
   const [interim, setInterim] = useState('');
@@ -22,6 +22,12 @@ export function useCaseSocket(caseId) {
   const wsRef = useRef(null);
   const audioCaptureRef = useRef(null);
   const mediaStreamRef = useRef(null);
+  // Kept in a ref (not a dependency) so a new onAgentStep identity from the parent
+  // doesn't tear down and reconnect the WebSocket/audio capture.
+  const onAgentStepRef = useRef(onAgentStep);
+  useEffect(() => {
+    onAgentStepRef.current = onAgentStep;
+  }, [onAgentStep]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +59,8 @@ export function useCaseSocket(caseId) {
       } else if (msg.type === 'alert') {
         setAlerts((prev) => [...prev, msg.alert]);
         if (msg.audio_b64) playBase64Audio(msg.audio_b64, msg.audio_mime || 'audio/mpeg');
+      } else if (msg.type === 'agent_step') {
+        onAgentStepRef.current?.(msg);
       } else if (msg.type === 'status' && msg.status === 'closed') {
         setStatus('closed');
       }

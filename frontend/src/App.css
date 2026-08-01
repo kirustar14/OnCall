@@ -331,3 +331,95 @@ body {
 .row-closed {
   opacity: 0.55;
 }
+
+.agent-log {
+  max-width: 900px;
+}
+
+.agent-log h2 {
+  margin: 0 0 4px;
+}
+
+.agent-log > .muted {
+  margin-bottom: 16px;
+}
+
+.agent-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-log-item {
+  background: #14161b;
+  border: 1px solid #262a33;
+  border-left: 3px solid #3a3f4b;
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+
+.agent-log-item.step-decision {
+  border-left-color: #2f6fed;
+}
+
+.agent-log-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: #8a919e;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.agent-log-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-log-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #333;
+  font-weight: 600;
+}
+
+.badge-trigger {
+  color: #9aa0aa;
+}
+
+.badge-tool_call {
+  color: #e4c95a;
+  border-color: #5c5023;
+}
+
+.badge-tool_result {
+  color: #6fb8d6;
+  border-color: #235c6b;
+}
+
+.badge-decision {
+  color: #6fd67a;
+  border-color: #2c5c33;
+}
+
+.agent-log-body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.agent-log-body code {
+  background: #0f1115;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.agent-log-spoken {
+  margin-top: 6px;
+  color: #c6cad3;
+  font-style: italic;
+}

@@ -167,6 +167,106 @@ class MedplumClient:
             },
         )
 
+    async def update_patient_name(self, patient_id: str, name: str) -> None:
+        headers = await self._headers()
+        resp = await self._http.patch(
+            f"{self._base_url}fhir/R4/Patient/{patient_id}",
+            headers={**headers, "Content-Type": "application/json-patch+json"},
+            json=[{"op": "replace", "path": "/name", "value": [{"text": name}]}],
+        )
+        resp.raise_for_status()
+
+    # --- Patient history (cross-encounter / cross-case lookups for the reasoning agent) -----
+
+    async def search_patients_by_name(self, name: str) -> list[dict[str, Any]]:
+        """Returns raw Patient resources whose name matches (FHIR does fuzzy/token matching)."""
+        bundle = await self.search("Patient", {"name": name})
+        return [entry["resource"] for entry in bundle.get("entry", [])]
+
+    async def fetch_patient_history(
+        self, patient_id: str, exclude_encounter_id: Optional[str] = None
+    ) -> dict[str, list[dict[str, Any]]]:
+        """All AllergyIntolerance / MedicationRequest / Observation / Encounter resources
+        for a patient across every encounter, simplified into the same shape used
+        elsewhere in the app. Used by the search_patient_history agent tool."""
+
+        allergy_bundle = await self.search("AllergyIntolerance", {"patient": f"Patient/{patient_id}"})
+        med_bundle = await self.search("MedicationRequest", {"patient": f"Patient/{patient_id}"})
+        obs_bundle = await self.search("Observation", {"patient": f"Patient/{patient_id}", "category": "vital-signs"})
+        encounter_bundle = await self.search("Encounter", {"patient": f"Patient/{patient_id}"})
+
+        def _entries(bundle: dict) -> list[dict]:
+            return [e["resource"] for e in bundle.get("entry", [])]
+
+        allergies = [
+            {
+                "allergen": r.get("code", {}).get("text", "unknown"),
+                "source": _extract_extension(r, SOURCE_EXTENSION_URL),
+                "encounter": _extract_reference_id(r.get("encounter")),
+            }
+            for r in _entries(allergy_bundle)
+        ]
+        medications = [
+            {
+                "name": r.get("medicationCodeableConcept", {}).get("text", "unknown"),
+                "source": _extract_extension(r, SOURCE_EXTENSION_URL),
+                "encounter": _extract_reference_id(r.get("encounter")),
+            }
+            for r in _entries(med_bundle)
+        ]
+        vitals = [
+            {
+                "name": r.get("code", {}).get("text", "unknown"),
+                "value": r.get("valueString", ""),
+                "encounter": _extract_reference_id(r.get("encounter")),
+            }
+            for r in _entries(obs_bundle)
+        ]
+        encounters = [
+            {"id": r.get("id"), "status": r.get("status")}
+            for r in _entries(encounter_bundle)
+        ]
+
+        if exclude_encounter_id:
+            allergies = [a for a in allergies if a["encounter"] != exclude_encounter_id]
+            medications = [m for m in medications if m["encounter"] != exclude_encounter_id]
+            vitals = [v for v in vitals if v["encounter"] != exclude_encounter_id]
+            encounters = [e for e in encounters if e["id"] != exclude_encounter_id]
+
+        return {"allergies": allergies, "medications": medications, "vitals": vitals, "encounters": encounters}
+
+    async def fetch_encounter_resources(self, encounter_id: str) -> dict[str, list[dict[str, Any]]]:
+        """Current allergies/medications/vitals for ONE encounter, read back from Medplum
+        (rather than trusting the in-memory mirror) — used to build the reasoning agent's
+        full case context."""
+
+        allergy_bundle = await self.search("AllergyIntolerance", {"encounter": f"Encounter/{encounter_id}"})
+        med_bundle = await self.search("MedicationRequest", {"encounter": f"Encounter/{encounter_id}"})
+        obs_bundle = await self.search(
+            "Observation", {"encounter": f"Encounter/{encounter_id}", "category": "vital-signs"}
+        )
+
+        def _entries(bundle: dict) -> list[dict]:
+            return [e["resource"] for e in bundle.get("entry", [])]
+
+        allergies = [
+            {"allergen": r.get("code", {}).get("text", "unknown"), "source": _extract_extension(r, SOURCE_EXTENSION_URL)}
+            for r in _entries(allergy_bundle)
+        ]
+        medications = [
+            {
+                "name": r.get("medicationCodeableConcept", {}).get("text", "unknown"),
+                "status": "given" if r.get("status") == "completed" else "ordered",
+                "source": _extract_extension(r, SOURCE_EXTENSION_URL),
+            }
+            for r in _entries(med_bundle)
+        ]
+        vitals = [
+            {"name": r.get("code", {}).get("text", "unknown"), "value": r.get("valueString", "")}
+            for r in _entries(obs_bundle)
+        ]
+        return {"allergies": allergies, "medications": medications, "vitals": vitals}
+
     async def close_encounter(self, encounter_id: str) -> None:
         headers = await self._headers()
         resp = await self._http.patch(
@@ -181,6 +281,19 @@ def _iso(epoch_seconds: float) -> str:
     import datetime
 
     return datetime.datetime.fromtimestamp(epoch_seconds, tz=datetime.timezone.utc).isoformat()
+
+
+def _extract_extension(resource: dict[str, Any], url: str) -> str:
+    for ext in resource.get("extension", []) or []:
+        if ext.get("url") == url:
+            return ext.get("valueString", "")
+    return ""
+
+
+def _extract_reference_id(reference: Optional[dict[str, Any]]) -> Optional[str]:
+    if not reference or "reference" not in reference:
+        return None
+    return reference["reference"].split("/")[-1]
 
 
 medplum_client = MedplumClient()
