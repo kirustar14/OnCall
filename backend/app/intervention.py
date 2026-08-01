@@ -92,11 +92,13 @@ CONFLICT_SCHEMA = {
         "basis": {
             "type": "string",
             "description": (
-                "ONE short clause, TWELVE WORDS MAXIMUM, stating the class relationship as fact — "
-                'e.g. "Ampicillin-sulbactam is a penicillin". This is spoken aloud over a working '
-                "trauma team, so length is a safety property: a long alert is an alert nobody hears "
-                "the end of. No pharmacology lesson, no explanation of mechanism. "
-                "Do NOT suggest what to give instead. Empty string if there is no conflict."
+                "ONE short clause, EIGHT WORDS MAXIMUM, stating the class relationship as fact. "
+                'Start with "That is" — the drug name is already said immediately before this, and '
+                'repeating it wastes the only seconds you have. e.g. "That is a penicillin" or '
+                '"That is a penicillin-class antibacterial". This is spoken over a working trauma '
+                "team, so length is a safety property: a long alert is one nobody hears the end of. "
+                "No pharmacology, no mechanism, and never what to give instead. "
+                "Empty string if there is no conflict."
             ),
         },
     },
@@ -196,38 +198,41 @@ def _time_ago(timestamp: float) -> str:
     return f"{hours} hour{'s' if hours != 1 else ''} ago"
 
 
-MAX_SPOKEN_WORDS = 45
+MAX_SPOKEN_WORDS = 30
 
 
 def _spoken_alert(case: CaseState, allergy: dict, med: dict, assessment: dict) -> str:
-    """Two facts and their provenance. No instruction, no recommendation.
+    """The order, the class relationship, then who said it and when. Stop.
 
-    Kept short on purpose. This is spoken over a working trauma team, and an
-    alert that runs for twenty seconds is one the room talks over — length is a
-    safety property, not a style preference. Order, allergy, provenance, class,
-    stop.
+    Ordered that way deliberately: the class claim is the actionable half and
+    goes first, provenance follows so the clinician can weigh it. Length is a
+    safety property here, not a style preference — an alert that runs twenty
+    seconds is one the room talks over. No instruction, no recommendation.
     """
     reaction = (allergy.get("reaction") or "").strip()
-    reaction_clause = f", {reaction}" if reaction else ""
+    # "penicillin allergy, anaphylaxis" is redundant when the reaction says it.
+    allergy_phrase = (
+        f"Documented {allergy['allergen']} {reaction}"
+        if reaction
+        else f"Documented {allergy['allergen']} allergy"
+    )
 
     source = (allergy.get("source") or "").strip()
     attribution = f" from {source}" if source else ""
 
-    parts = [
-        f"{case.spoken_label}. {med['name']} just ordered.",
-        f"Documented {allergy['allergen']} allergy{reaction_clause}, "
-        f"recorded {_time_ago(allergy['timestamp'])}{attribution}.",
-    ]
+    basis = (assessment.get("basis") or "").rstrip(".")
+    if not basis and assessment.get("drug_class"):
+        basis = f"That is in the {assessment['drug_class']} class"
 
-    if assessment.get("basis"):
-        parts.append(assessment["basis"].rstrip("."))
-    elif assessment.get("drug_class"):
-        parts.append(f"{med['name']} is in the {assessment['drug_class']} class")
+    parts = [f"{case.spoken_label}. {med['name']} just ordered."]
+    if basis:
+        parts.append(basis)
+    parts.append(f"{allergy_phrase}, {_time_ago(allergy['timestamp'])}{attribution}")
 
     spoken = " ".join(p if p.endswith(".") else p + "." for p in parts)
 
-    # Hard backstop: the model is told twelve words, but a runaway `basis` must
-    # not turn the interrupt into a monologue.
+    # Backstop: the model is told eight words for the basis, but a runaway one
+    # must not turn the interrupt into a monologue.
     words = spoken.split()
     if len(words) > MAX_SPOKEN_WORDS:
         spoken = " ".join(words[:MAX_SPOKEN_WORDS]).rstrip(",;") + "."
