@@ -124,7 +124,10 @@ You are NOT recommending treatment. Do not name an alternative drug, do not sugg
 give instead, and do not tell the clinician what to do. State the class relationship as a fact \
 and stop. The clinician decides.
 
-Set conflict=false where there is no genuine class relationship. Do not manufacture one."""
+Set conflict=false where there is no genuine class relationship. Do not manufacture one.
+
+Writing style: avoid em dashes. Use a comma, a full stop, or a colon instead. Keep punctuation plain so a text-to-speech voice reads it naturally and a clinician scanning the screen is not slowed down by ornament.
+"""
 
 
 async def _assess_conflict(allergen: str, medication: str) -> dict:

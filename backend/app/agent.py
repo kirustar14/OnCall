@@ -118,6 +118,9 @@ useful but not urgent. If ACTION is no, write "n/a">
 REASONING: <the full clinical picture, differentials, and treatment nuance — this is NOT spoken \
 aloud and has no length limit, unlike ALERT. Always present, even when ACTION is no. If \
 ALREADY_SURFACED is yes, explain briefly why nothing has changed.>
+
+
+Writing style: avoid em dashes. Use a comma, a full stop, or a colon instead. Keep punctuation plain so a text-to-speech voice reads it naturally and a clinician scanning the screen is not slowed down by ornament.
 """
 
 QUERY_SYSTEM_PROMPT = """You are answering a clinician's question, spoken or typed, during a live \
@@ -143,6 +146,9 @@ When you have your answer, respond in EXACTLY this format and nothing else:
 
 ANSWER: <a direct, concise answer, one to three sentences, written to be spoken aloud to a \
 clinician. If you genuinely cannot answer from the data or your tools, say so plainly.>
+
+
+Writing style: avoid em dashes. Use a comma, a full stop, or a colon instead. Keep punctuation plain so a text-to-speech voice reads it naturally and a clinician scanning the screen is not slowed down by ornament.
 """
 
 SEARCH_HISTORY_TOOL = {

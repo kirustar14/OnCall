@@ -42,7 +42,10 @@ waiting, and every word costs time before they can act.
 patient is and the single most important thing, then what nobody owns.
 - Every other field: AT MOST 4 entries, each ONE short line. Pick what changes what the reader \
 does next and drop the rest. An exhaustive list is not a handoff — it is a transcript with \
-bullet points, which is the thing this exists to replace."""
+bullet points, which is the thing this exists to replace.
+
+Writing style: avoid em dashes. Use a comma, a full stop, or a colon instead. Keep punctuation plain so a text-to-speech voice reads it naturally and a clinician scanning the screen is not slowed down by ornament.
+"""
 
 OUTPUT_SCHEMA = {
     "type": "object",

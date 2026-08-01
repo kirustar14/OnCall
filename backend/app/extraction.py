@@ -87,7 +87,10 @@ An order to give a drug is a medication, not a task. Do not also emit it as work
 - Only emit a resolution when it clearly maps to an item in the open ledger you were given. \
 NEVER invent a task_id. If nothing matches, return an empty resolutions array.
 
-Return empty arrays/strings where nothing applies. Silence is a valid answer."""
+Return empty arrays/strings where nothing applies. Silence is a valid answer.
+
+Writing style: avoid em dashes. Use a comma, a full stop, or a colon instead. Keep punctuation plain so a text-to-speech voice reads it naturally and a clinician scanning the screen is not slowed down by ornament.
+"""
 
 OUTPUT_SCHEMA = {
     "type": "object",
