@@ -159,6 +159,10 @@ async def _speak_alert(case: CaseState, alert: Alert) -> None:
         },
     )
 
+    # Look at what was in view when this fired. Fire-and-forget: the alert has
+    # already gone out, and a picture must never delay the thing it illustrates.
+    asyncio.create_task(look_back_at(case, alert.timestamp))
+
 
 async def _answer_query(case: CaseState, question: str) -> str:
     """Run the query agent, then speak the answer as an advisory item."""
